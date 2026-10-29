@@ -114,10 +114,10 @@ export function mountApp(root) {
   defineRoute('/youtube/channel/:id', youtubeChannelView);
   defineRoute('/settings/:section?', settingsView);
 
+  // Before router.start: the first route event must already set the class (direct start on #/lampa).
+  bus.on('route', ({ path }) => document.documentElement.classList.toggle('route-lampa', path === '/lampa'));
   const start = store.get('ui.startView') || 'home';
   router.start(outlet, '/' + start);
-  document.documentElement.classList.toggle('route-lampa', false);
-  bus.on('route', ({ path }) => document.documentElement.classList.toggle('route-lampa', path === '/lampa'));
 
   return { banner };
 }
