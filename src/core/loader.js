@@ -11,6 +11,10 @@ const LIBS = {
     global: 'mpegts',
     urls: ['./vendor/mpegts.js', 'https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js'],
   },
+  pako: {
+    global: 'pako',
+    urls: ['https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako_inflate.min.js'],
+  },
   dash: {
     global: 'dashjs',
     urls: ['./vendor/dash.all.min.js', 'https://cdn.jsdelivr.net/npm/dashjs@4.7.4/dist/dash.all.min.js'],

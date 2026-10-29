@@ -140,3 +140,57 @@
   .preview-info { padding: 0.5rem 0.75rem; }
 }
 html.perf-low .live-layout.with-preview .preview { box-shadow: none; }
+
+/* ---------- TV-Programm (EPG) & Archiv ---------- */
+.guide-chip .icon, .icon.tiny { width: 1rem; height: 1rem; }
+.epg-status { font-size: 0.85rem; flex: 1 1 auto; }
+.epg-days { margin-bottom: 0.5rem; }
+.epg-layout { display: grid; grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.epg-channels { display: flex; flex-direction: column; gap: 0.15rem; max-height: calc(100vh - 12rem); max-height: calc(100dvh - 12rem); overflow-y: auto; position: sticky; top: 0; padding: 0.2rem; }
+.epg-ch { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.55rem; border-radius: var(--radius-sm); text-align: left; flex: none; scroll-margin: 3rem; }
+.epg-ch:hover { background: var(--surface); }
+.epg-ch.active { background: var(--accent-a18); }
+.epg-ch-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.epg-ch-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 0.4rem; }
+.epg-ch-now { font-size: 0.8rem; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.archive-dot { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--success); flex: none; }
+.epg-main { min-width: 0; }
+.epg-chhead { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+.epg-chhead .img-wrap.epg-logo { position: relative; width: 4.5rem; height: 2.8rem; border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.06); flex: none; }
+.epg-chhead-text { flex: 1; min-width: 10rem; }
+.epg-programmes { display: flex; flex-direction: column; gap: 0.3rem; }
+.epg-prog { display: flex; align-items: flex-start; gap: 0.9rem; padding: 0.65rem 0.8rem; border-radius: var(--radius); text-align: left; background: var(--surface); border: 1px solid transparent; scroll-margin: 4rem; }
+.epg-prog:hover { border-color: var(--border); }
+.epg-prog.past { opacity: 0.6; }
+.epg-prog.past.has-archive { opacity: 0.9; }
+.epg-prog.running { border-color: var(--accent); background: var(--accent-a18); }
+.epg-time { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 3.2rem; color: var(--text-2); }
+.epg-prog.running .epg-time { color: var(--accent); }
+.epg-prog-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.epg-title { font-weight: 600; }
+.epg-desc { font-size: 0.82rem; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.epg-progress { display: block; height: 0.22rem; border-radius: 1rem; background: rgba(255, 255, 255, 0.15); margin-top: 0.3rem; overflow: hidden; }
+.epg-progress span { display: block; height: 100%; background: var(--accent); }
+.epg-badge { display: inline-flex; align-items: center; gap: 0.3rem; flex: none; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
+.epg-badge .icon { width: 0.85rem; height: 0.85rem; fill: currentColor; }
+.epg-badge.live { background: rgba(255, 59, 92, 0.18); color: var(--live); }
+.epg-badge.archive { background: rgba(34, 197, 94, 0.16); color: var(--success); }
+.epg-full-desc { white-space: pre-line; line-height: 1.55; }
+html.mode-tv .epg-ch:focus { background: var(--surface-2); }
+html.mode-tv .epg-prog:focus { border-color: var(--accent); background: var(--surface-2); }
+.epg-channel-picker { display: none; }
+@media (max-width: 899px) {
+  .epg-layout { grid-template-columns: 1fr; }
+  html.mode-touch .epg-channels { display: none; }
+  html.mode-touch .epg-channel-picker { display: inline-flex; }
+}
+
+/* now / next in the preview */
+.preview-epg { padding: 0 0.9rem 0.8rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; }
+.preview-epg:empty { display: none; }
+.pe-now, .pe-next { display: grid; grid-template-columns: 3rem 1fr; align-items: center; column-gap: 0.5rem; }
+.pe-next { color: var(--text-2); }
+.pe-time { font-variant-numeric: tabular-nums; font-weight: 700; }
+.pe-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-bar { grid-column: 2; height: 0.2rem; border-radius: 1rem; background: rgba(255, 255, 255, 0.15); overflow: hidden; margin-top: 0.2rem; }
+.pe-bar span { display: block; height: 100%; background: var(--accent); }

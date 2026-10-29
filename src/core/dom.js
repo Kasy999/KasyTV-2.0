@@ -99,6 +99,8 @@ const ICONS = {
   star: 'M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.3L12 17.5 6.5 20.4l1-6.3L3 9.7l6.2-.9z',
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  guide: 'M3 5h18v15H3zM3 10h18M8 3v4M16 3v4M7 14h4M7 17h7',
+  restart: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5',
   sort: 'M3 6h11M3 12h8M3 18h5M18 5v14M14.5 15.5L18 19l3.5-3.5',
   refresh: 'M20 11a8 8 0 0 0-14.9-4M4 4v4h4M4 13a8 8 0 0 0 14.9 4M20 20v-4h-4',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',

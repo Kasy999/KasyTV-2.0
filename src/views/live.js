@@ -11,6 +11,7 @@ import { toast } from '../components/toast.js';
 import * as iptv from '../services/iptv.js';
 import { playChannel, playUrl } from '../player/player.js';
 import { PreviewPanel } from '../player/preview.js';
+import * as epg from '../services/epg.js';
 import { inputMode } from '../core/input-mode.js';
 
 export const M3U_ACCEPT = '.m3u,.m3u8,audio/x-mpegurl,audio/mpegurl,application/x-mpegurl,application/vnd.apple.mpegurl,text/plain';
@@ -150,14 +151,24 @@ export async function liveView(el, { query }) {
   const viewBtn = h('button.icon-btn', { type: 'button', data: { focus: true }, 'aria-label': 'Ansicht' });
   const sortBtn = h('button.icon-btn', { type: 'button', data: { focus: true }, 'aria-label': 'Sortierung', title: 'Sortierung' }, icon('sort'));
   const addBtn = h('button.icon-btn', { type: 'button', data: { focus: true }, 'aria-label': 'Playlist hinzufügen', title: 'Playlist hinzufügen' }, icon('plus'));
+  const guideBtn = h('button.chip.guide-chip', { type: 'button', data: { focus: true }, title: 'TV-Programm & Archiv' }, icon('guide'), h('span', 'TV-Programm'));
+  const openGuide = (ch) => navigate(`/live/epg?g=${encodeURIComponent(state.group)}${ch ? '&ch=' + encodeURIComponent(ch.id) : ''}`);
+  guideBtn.addEventListener('click', () => openGuide(null));
+  let epgData = null;
   const chips = h('div.chips', { data: { focusGroup: true } });
   const grid = h('div.channel-grid', { data: { focusGroup: true } });
   const info = h('div.list-info.muted');
 
   const previewOn = store.get('iptv.preview') !== false;
-  const preview = previewOn ? new PreviewPanel({ onOpen: (i) => i >= 0 && list[i] && playChannel(source.id, list, i) }) : null;
+  const preview = previewOn
+    ? new PreviewPanel({
+        onOpen: (i) => i >= 0 && list[i] && playChannel(source.id, list, i),
+        onGuide: (ch) => openGuide(ch),
+        nowNext: (ch) => (epgData ? epg.nowNext(epgData, ch) : null),
+      })
+    : null;
   el.append(
-    h('header.view-head', h('h1', 'Live-TV'), h('div.head-actions', { data: { focusGroup: true } }, sourceBtn, search, sortBtn, viewBtn, addBtn)),
+    h('header.view-head', h('h1', 'Live-TV'), h('div.head-actions', { data: { focusGroup: true } }, sourceBtn, guideBtn, search, sortBtn, viewBtn, addBtn)),
     chips,
     h('div.live-layout' + (preview ? '.with-preview' : ''), preview ? preview.el : null, h('div.live-list', info, grid)),
   );
@@ -235,6 +246,13 @@ export async function liveView(el, { query }) {
         }),
       });
       card.dataset.index = String(i);
+      if (epgData && state.view === 'list') {
+        const nn = epg.nowNext(epgData, ch);
+        if (nn.now) {
+          const g = card.querySelector('.ch-group');
+          if (g) g.textContent = nn.now.title;
+        }
+      }
       if (preview && preview.isShowing(i) && preview.channel === ch) card.classList.add('previewing');
       return card;
     });
@@ -251,6 +269,13 @@ export async function liveView(el, { query }) {
       favs = new Set(await iptv.favoriteKeys());
       renderChips();
       renderList();
+      // EPG in the background: now/next in the preview and the list view
+      epg.getEpg(source.id).then((d) => {
+        if (!d) return;
+        epgData = d;
+        if (preview) preview.renderEpg();
+        if (state.view === 'list') preserveFocus(grid, renderList);
+      }).catch(() => {});
     } catch (e) {
       grid.replaceChildren(
         emptyState({

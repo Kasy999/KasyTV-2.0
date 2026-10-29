@@ -27,6 +27,7 @@ export const DEFAULTS = {
     view: 'grid', // grid | list
     preview: true, // live preview of the highlighted channel
     previewSound: false,
+    epgShift: 0, // hours, added to every programme (on top of tvg-shift)
     sort: 'default', // default | name | number
     lastGroup: '__all',
     corsProxy: '', // e.g. http://192.168.1.10:8080/proxy?url={url}

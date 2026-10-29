@@ -76,6 +76,12 @@ Jellyfin im Heimnetz (`http://192.168…:8096`), HTTP-Playlists und HTTP-Streams
 * **Live-Vorschau** des markierten Senders neben der Liste (Fernbedienung: Sender markieren → läuft nach kurzer
   Pause; Touch: erster Tipp = Vorschau, zweiter Tipp = Vollbild). Stoppt automatisch, wenn der Vollbild-Player
   läuft, damit TV-Sticks nie zwei Streams gleichzeitig dekodieren.
+* **TV-Programm (EPG) mit Archiv:** XMLTV aus der Playlist (url-tvg) oder eigene Adresse, auch `.gz`, wird
+  gestreamt gelesen. Programmführer mit Senderliste, Tagen (so weit zurück wie das Archiv des Anbieters reicht),
+  laufender Sendung mit Fortschritt. Vergangene Sendungen spielen **aus dem Archiv** (catchup default/append/shift,
+  Flussonic, Xtream, catchup-source mit Platzhaltern), die laufende Sendung „Live“ oder „Von Anfang“. Jetzt/Danach
+  in der Vorschau, in der Listenansicht und im Player; im Player öffnet die Taste GUIDE bzw. das Programm-Symbol den
+  Programmführer. Zeitverschiebung und EPG-Adresse unter Einstellungen → IPTV-Quellen.
 * Mehrere Quellen (URL oder Datei), Kategorien, Suche, Favoriten, zuletzt gesehen, Kachel-/Listenansicht,
   Sortierung, automatische Aktualisierung von URL-Quellen.
 * Player: **hls.js** (Android TV, Xiaomi-Stick, Chrome, Smart-TVs), natives HLS (iOS/Safari), **mpegts.js** für
@@ -168,5 +174,5 @@ pwa/
 * iOS spielt kein reines MPEG-TS (`.ts`) – nur HLS. Viele Anbieter bieten beide Varianten an.
 * Ältere TV-Browser (Chromium < 64) werden über den Legacy-Build von Vite (`@vitejs/plugin-legacy`) bedient;
   Layout-Details (z. B. Flex-`gap`) brauchen Chromium 84+. Für alte Fernseher bleibt `../smarttv` die bessere Wahl.
-* EPG/Programmführer und TV-Archiv sind in der PWA (noch) nicht enthalten – die Catchup-Daten werden aber
-  bereits aus der Playlist gelesen.
+* EPG-Dateien ohne CORS-Freigabe brauchen den CORS-Proxy (Einstellungen → IPTV). Ob das Archiv eines Senders
+  funktioniert, hängt von den catchup-Angaben der Playlist und vom Anbieter ab.

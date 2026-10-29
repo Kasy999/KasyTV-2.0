@@ -161,6 +161,11 @@ export async function removeSource(id) {
   bus.emit('iptv:changed', { sourceId: null });
 }
 
+export function setSourceEpg(id, epgUrl) {
+  store.set('iptv.sources', sources().map((s) => (s.id === id ? { ...s, epgUrl } : s)));
+  bus.emit('iptv:changed', { sourceId: id });
+}
+
 export function renameSource(id, name) {
   store.set('iptv.sources', sources().map((s) => (s.id === id ? { ...s, name } : s)));
   bus.emit('iptv:changed', { sourceId: id });

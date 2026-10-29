@@ -14,8 +14,10 @@ import { perf } from '../core/performance.js';
 import { VideoEngine } from './engine.js';
 
 export class PreviewPanel {
-  constructor({ onOpen }) {
+  constructor({ onOpen, onGuide, nowNext }) {
     this.onOpen = onOpen; // (index) => open full screen
+    this.onGuide = onGuide; // (channel) => open the programme guide
+    this.nowNext = nowNext; // (channel) => { now, next, progress } or null
     this.channel = null;
     this.index = -1;
     this.timer = null;
@@ -30,6 +32,8 @@ export class PreviewPanel {
     this.meta = h('div.preview-meta.muted');
     this.muteBtn = h('button.icon-btn.small', { type: 'button', data: { focus: true }, 'aria-label': 'Ton', title: 'Ton an/aus', onClick: () => this.toggleMute() }, icon('mute'));
     const fsBtn = h('button.btn.primary.small', { type: 'button', data: { focus: true }, onClick: () => this.open() }, icon('fullscreen'), h('span.btn-label', 'Vollbild'));
+    const guideBtn = h('button.icon-btn.small', { type: 'button', data: { focus: true }, 'aria-label': 'TV-Programm', title: 'TV-Programm & Archiv', onClick: () => this.channel && this.onGuide && this.onGuide(this.channel) }, icon('guide'));
+    this.epgBox = h('div.preview-epg');
     this.el = h(
       'aside.preview',
       { data: { focusGroup: true } },
@@ -39,7 +43,8 @@ export class PreviewPanel {
         this.video,
         this.status,
       ),
-      h('div.preview-info', this.logo, h('div.preview-text', this.name, this.meta), h('div.preview-actions', this.muteBtn, fsBtn)),
+      h('div.preview-info', this.logo, h('div.preview-text', this.name, this.meta), h('div.preview-actions', this.muteBtn, guideBtn, fsBtn)),
+      this.epgBox,
     );
     this.setIdle();
     this.offs = [
@@ -61,12 +66,29 @@ export class PreviewPanel {
     this.name.textContent = channel.name;
     this.meta.textContent = [channel.number ? 'Nr. ' + channel.number : null, channel.group].filter(Boolean).join(' · ');
     this.logo.replaceChildren(img(channel.logo, channel.name, 'logo', channel.name));
+    this.renderEpg();
     clearTimeout(this.timer);
     this.engine.destroy();
     this.status.replaceChildren(h('div.spinner'));
     this.status.classList.add('show');
     if (this.paused) return;
     this.timer = setTimeout(() => this.load(), immediate ? 0 : perf.low ? 900 : 550);
+  }
+
+  /** Now / next of the previewed channel (from the EPG). */
+  renderEpg() {
+    const nn = this.channel && this.nowNext ? this.nowNext(this.channel) : null;
+    if (!nn || (!nn.now && !nn.next)) {
+      this.epgBox.replaceChildren();
+      return;
+    }
+    const hm = (t) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    this.epgBox.replaceChildren(
+      nn.now
+        ? h('div.pe-now', h('span.pe-time', hm(nn.now.start)), h('span.pe-title', nn.now.title), h('span.pe-bar', h('span', { style: { width: Math.round(nn.progress * 100) + '%' } })))
+        : null,
+      nn.next ? h('div.pe-next', h('span.pe-time', hm(nn.next.start)), h('span.pe-title', nn.next.title)) : null,
+    );
   }
 
   isShowing(index) {

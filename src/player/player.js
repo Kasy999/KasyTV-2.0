@@ -21,6 +21,8 @@ import { stepperRow, selectRow, colorRow } from '../components/controls.js';
 import { toast } from '../components/toast.js';
 import { SegmentSkipper, fetchSponsorSegments, youtubeId } from '../services/sponsorblock.js';
 import * as iptv from '../services/iptv.js';
+import * as epg from '../services/epg.js';
+import { navigate } from '../core/router.js';
 import * as jf from '../services/jellyfin.js';
 import { getResume, saveResume } from '../services/resume.js';
 import { COLORS, FONTS } from '../services/text-style.js';
@@ -103,6 +105,7 @@ class Player {
     this.btnNext = cb('skipNext', 'Nächster Sender', () => this.zapBy(1), 'live-only');
     this.btnList = cb('list', 'Senderliste', () => this.openChannelPanel(), 'live-only');
     this.btnFav = cb('star', 'Favorit', () => this.toggleFavorite(), 'live-only');
+    this.btnGuide = cb('guide', 'TV-Programm & Archiv', () => this.openGuide(), 'live-only');
     this.btnAudio = cb('audio', 'Tonspur', () => this.menuAudio());
     this.btnSubs = cb('subtitles', 'Untertitel', () => this.menuSubtitles());
     this.btnQuality = cb('quality', 'Qualität', () => this.menuQuality());
@@ -116,7 +119,7 @@ class Player {
       { data: { focusGroup: true } },
       h('div.osd-group', this.btnPrev, this.btnRew, this.btnPlay, this.btnFwd, this.btnNext),
       h('div.osd-spacer'),
-      h('div.osd-group', this.btnList, this.btnFav, this.btnAudio, this.btnSubs, this.btnQuality, this.btnMute, this.btnMore, this.btnPip, this.btnFs),
+      h('div.osd-group', this.btnList, this.btnGuide, this.btnFav, this.btnAudio, this.btnSubs, this.btnQuality, this.btnMute, this.btnMore, this.btnPip, this.btnFs),
     );
     // Big centre buttons for touch
     this.centerPlay = h('button.osd-center-btn.big', { type: 'button', 'aria-label': 'Wiedergabe/Pause', onClick: () => this.togglePlay() }, icon('play'));
@@ -518,6 +521,11 @@ class Player {
       title = ch.name;
       sub = `${ch.number ? ch.number + ' · ' : ''}${ch.group || ''}`;
       logo = ch.logo;
+      epg.getEpg(s.sourceId, { autoRefresh: false }).then((d) => {
+        if (!d || this.session !== s || s.channels[s.index] !== ch) return;
+        const nn = epg.nowNext(d, ch);
+        if (nn.now) this.subtitleEl.textContent = `${epg.formatHm(nn.now.start)}–${epg.formatHm(nn.now.stop)} ${nn.now.title}` + (nn.next ? `  ·  danach ${epg.formatHm(nn.next.start)} ${nn.next.title}` : '');
+      }).catch(() => {});
     } else if (s.kind === 'jellyfin') {
       const it = s.item;
       title = it.SeriesName || it.Name;
@@ -701,6 +709,15 @@ class Player {
     s.index = idx;
     await this.stopCurrent();
     this.start();
+  }
+
+  /** Closes the player and opens the programme guide (archive) of the current channel. */
+  openGuide() {
+    const s = this.session;
+    if (!s || s.kind !== 'channel') return;
+    const ch = s.channels[s.index];
+    this.close();
+    setTimeout(() => navigate('/live/epg?ch=' + encodeURIComponent(ch.id)), 50);
   }
 
   async toggleFavorite() {
@@ -1062,6 +1079,9 @@ class Player {
         break;
       case 'blue':
         this.menuAudio();
+        break;
+      case 'guide':
+        this.openGuide();
         break;
       case 'info':
         if (this.osdVisible) this.hideOsd();

@@ -15,6 +15,7 @@ import { SB_CATEGORIES } from '../services/sponsorblock.js';
 import { DEFAULT_HOSTS, blockedTotal } from '../services/adblock.js';
 import * as iptv from '../services/iptv.js';
 import * as jf from '../services/jellyfin.js';
+import * as epg from '../services/epg.js';
 import { exportBackup, importBackup, daysSinceBackup } from '../services/backup.js';
 import { jellyfinLoginForm } from './library.js';
 import { uploadPlaylistFlow, addUrlFlow, pickPlaylistFile } from './live.js';
@@ -62,7 +63,7 @@ export async function settingsView(el, { params }) {
     const builder = BUILDERS[active];
     if (!builder) return;
     const focusedIdx = Array.prototype.indexOf.call(content.querySelectorAll('[data-focus]'), document.activeElement);
-    content.replaceChildren(h('h2.settings-heading', SECTIONS.find((s) => s.id === active).label), ...(await builder(render, offs)));
+    content.replaceChildren(h('h2.settings-heading', SECTIONS.find((s) => s.id === active).label), ...(await builder(render, offs)).filter(Boolean));
     if (focusedIdx >= 0) {
       const again = content.querySelectorAll('[data-focus]')[focusedIdx];
       if (again) again.focus({ preventScroll: true });
@@ -73,6 +74,45 @@ export async function settingsView(el, { params }) {
 }
 
 // --------------------------------------------------------------------------------------------- sections
+
+/** EPG settings of the active playlist (address, time shift, reload). */
+function epgSection(render) {
+  const src = iptv.getActiveSource();
+  if (!src) return null;
+  const status = h('p.form-status');
+  const st = epg.epgStatus(src.id);
+  if (st) status.textContent = `${st.channels} Sender mit Programm · ${st.count} Sendungen · Stand ${formatDate(st.updatedAt)}`;
+  const urlBtn = h('button.select-btn.text', { type: 'button', data: { focus: true } }, h('span.select-value', src.epgUrl || 'aus der Playlist (url-tvg)'), icon('next'));
+  urlBtn.addEventListener('click', async () => {
+    const v = await promptDialog('EPG-Adresse', { value: src.epgUrl || '', placeholder: 'https://…/epg.xml.gz', type: 'url', hint: 'XMLTV, auch .gz. Leer lassen = Adresse aus der Playlist (url-tvg). Mehrere Adressen mit Leerzeichen trennen.' });
+    if (v === null) return;
+    iptv.setSourceEpg(src.id, v.trim());
+    await epg.clearEpg(src.id);
+    render();
+  });
+  return section(
+    'TV-Programm (EPG) & Archiv – ' + src.name,
+    h('div.set-row', h('div.set-text', h('div.set-label', 'EPG-Adresse'), h('div.set-desc', 'Programmdaten für Programmführer und Archiv')), h('div.set-control', urlBtn)),
+    stepperRow('Zeitverschiebung', 'Falls die Sendezeiten im EPG versetzt sind', 'iptv.epgShift', { min: -12, max: 12, step: 0.5, format: (v) => (v > 0 ? '+' : '') + v + ' h' }),
+    actionRow('EPG jetzt laden', 'Wird sonst alle 12 Stunden automatisch aktualisiert', 'Laden', async () => {
+      status.className = 'form-status';
+      status.textContent = 'Lädt …';
+      const off = bus.on('epg:progress', ({ bytes }) => (status.textContent = `Lädt … ${(bytes / 1048576).toFixed(1)} MB`));
+      try {
+        const d = await epg.refreshEpg(src.id);
+        status.textContent = `${d.channels} Sender mit Programm · ${d.count} Sendungen`;
+        status.classList.add('ok');
+      } catch (e) {
+        status.textContent = e.message;
+        status.classList.add('error');
+      } finally {
+        off();
+      }
+    }, { iconName: 'refresh' }),
+    status,
+    h('p.hint', 'Archiv: Sender mit catchup-Angaben in der Playlist (catchup, catchup-source, catchup-days, Xtream, Flussonic …) lassen sich im TV-Programm zurückschauen.'),
+  );
+}
 
 const BUILDERS = {
   async general(render, offs) {
@@ -194,6 +234,7 @@ const BUILDERS = {
         toggleRow('Vorschau des markierten Senders', 'Fernbedienung: der markierte Sender läuft nach kurzer Pause in der Vorschau. Touch: erster Tipp = Vorschau, zweiter Tipp = Vollbild.', 'iptv.preview'),
         toggleRow('Ton in der Vorschau', null, 'iptv.previewSound'),
       ),
+      epgSection(render),
       section(
         'Netzwerk',
         textRow('CORS-Proxy', 'Für Anbieter, die Web-Apps den Abruf nicht erlauben. {url} wird durch die Adresse ersetzt.', 'iptv.corsProxy', {

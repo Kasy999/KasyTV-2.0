@@ -10,6 +10,7 @@ import { initDialogs } from './components/dialog.js';
 
 import { homeView } from './views/home.js';
 import { liveView } from './views/live.js';
+import { epgView } from './views/epg.js';
 import { libraryView, libraryDetailView, libraryBrowseView } from './views/library.js';
 import { lampaView } from './views/lampa.js';
 import { settingsView } from './views/settings.js';
@@ -102,6 +103,7 @@ export function mountApp(root) {
 
   defineRoute('/home', homeView);
   defineRoute('/live', liveView);
+  defineRoute('/live/epg', epgView);
   defineRoute('/library', libraryView);
   defineRoute('/library/view/:id', libraryBrowseView);
   defineRoute('/library/item/:id', libraryDetailView);
