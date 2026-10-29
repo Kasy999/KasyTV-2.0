@@ -1,0 +1,9 @@
+/* The seven fonts of the Android app (SIL Open Font License), bundled from src/assets/fonts.
+   font-display: swap – text is visible immediately with the system font while the file loads. */
+@font-face { font-family: 'Inter'; src: url('../assets/fonts/font_inter.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Montserrat'; src: url('../assets/fonts/font_montserrat.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('../assets/fonts/font_nunito.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Rubik'; src: url('../assets/fonts/font_rubik.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Exo 2'; src: url('../assets/fonts/font_exo2.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Comfortaa'; src: url('../assets/fonts/font_comfortaa.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Oswald'; src: url('../assets/fonts/font_oswald.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }

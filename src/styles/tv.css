@@ -1,0 +1,68 @@
+/*
+ * TV / D-pad mode: 10-foot UI. The base size follows the screen width (1920 px wide → 24 px), so the layout looks
+ * the same on 720p sticks (WebView often reports 960×540 CSS px), 1080p TVs and 4K. Focus ring + scale on the
+ * focused element; the nav rail is always visible.
+ */
+html.mode-tv {
+  font-size: calc(max(12px, 100vw / 80) * var(--ui-scale));
+  --page-x: 2.5rem;
+  --nav-w: 4.6rem;
+}
+
+html.mode-tv body { cursor: default; }
+
+html.mode-tv [data-focus] { scroll-margin: 3rem 4rem; }
+
+html.mode-tv [data-focus]:focus,
+html.mode-tv [data-focus]:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  position: relative;
+  z-index: 2;
+}
+
+html.mode-tv .card:focus {
+  transform: scale(1.07);
+  box-shadow: none;
+}
+html.mode-tv .card:focus .card-media,
+html.mode-tv .card.channel:focus,
+html.mode-tv .card.action:focus {
+  box-shadow: var(--ring);
+}
+html.mode-tv .card.channel:focus { background: var(--surface-2); }
+html.mode-tv .card.poster:focus .card-title { color: #fff; }
+
+html.mode-tv .btn:focus { transform: scale(1.06); }
+html.mode-tv .btn.primary:focus { box-shadow: var(--ring); }
+html.mode-tv .chip:focus { background: var(--surface-2); color: var(--text); }
+html.mode-tv .chip.active:focus { background: var(--accent); color: #fff; }
+html.mode-tv .nav-item:focus { background: var(--surface-2); color: var(--text); }
+html.mode-tv .settings-link:focus { background: var(--surface-2); color: var(--text); }
+html.mode-tv .option:focus { background: var(--surface-2); }
+html.mode-tv .switch:focus, html.mode-tv .select-btn:focus { box-shadow: var(--ring); }
+html.mode-tv .swatch:focus { transform: scale(1.18); }
+html.mode-tv .episode:focus { border-color: var(--accent); background: var(--surface-2); }
+html.mode-tv .input:focus { box-shadow: var(--ring); }
+html.mode-tv .panel-item:focus { background: var(--surface-2); color: #fff; }
+html.mode-tv .lampa-frame:focus { box-shadow: none; }
+
+/* Player controls on TV: big, clear focus */
+html.mode-tv .osd-btn:focus { background: var(--accent); color: #fff; transform: scale(1.12); box-shadow: 0 0 1.2rem var(--glow); }
+html.mode-tv .osd-btn.primary:focus { background: #fff; color: #0b0e14; box-shadow: 0 0 0 0.2rem var(--accent), 0 0 1.4rem var(--glow); }
+html.mode-tv .osd-bar:focus { box-shadow: none; }
+html.mode-tv .osd-bar:focus .bar-thumb { width: 1.4rem; height: 1.4rem; margin: -0.7rem 0 0 -0.7rem; box-shadow: 0 0 0 0.2rem var(--accent), 0 0 1rem var(--glow); }
+html.mode-tv .player-skip:focus { box-shadow: 0 0 0 0.25rem var(--accent), var(--shadow); transform: scale(1.06); }
+
+/* On TV the rail never turns into a tab bar */
+html.mode-tv .nav:hover, html.mode-tv .nav:focus-within { width: 15rem; }
+html.mode-tv .dialog { width: min(40rem, 100%); }
+html.mode-tv .dialog.wide { width: min(56rem, 100%); }
+html.mode-tv .card.poster { width: 10rem; }
+html.mode-tv .card.poster.wide { width: 17rem; }
+html.mode-tv .channel-grid { grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
+html.mode-tv .outlet { scroll-behavior: smooth; }
+html.mode-tv .settings-layout { grid-template-columns: 16rem 1fr; }
+
+/* Touch mode: no focus rings from the D-pad system, keep native ones for keyboards */
+html.mode-touch [data-focus]:focus:not(:focus-visible) { box-shadow: none; }

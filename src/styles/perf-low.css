@@ -1,0 +1,82 @@
+/*
+ * Low-performance mode (html.perf-low) – for the Xiaomi TV Stick 4K, Fire TV sticks and older Smart TVs.
+ * Removes everything the GPU of those devices struggles with:
+ *   backdrop-filter (blur), large/multiple box-shadows, glow, gradients behind content, transitions, keyframe
+ *   animations, transform scaling, smooth scrolling, image fade-ins.
+ * Translucent surfaces become solid fallback colours, state changes are instant. Focus stays clearly visible
+ * through a cheap solid outline.
+ */
+html.perf-low {
+  --surface: var(--surface-solid);
+  --surface-2: var(--surface-solid-2);
+  --blur: none;
+  --shadow: none;
+  --shadow-sm: none;
+  --ring: 0 0 0 0.2rem var(--accent);
+  --t: 0ms;
+  --t-fast: 0ms;
+}
+
+html.perf-low *,
+html.perf-low *::before,
+html.perf-low *::after {
+  transition: none !important;
+  animation: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  scroll-behavior: auto !important;
+}
+
+html.perf-low body::before { background: var(--bg); }
+
+html.perf-low .nav,
+html.perf-low .dialog,
+html.perf-low .player-panel,
+html.perf-low .player-zap,
+html.perf-low .toast,
+html.perf-low .card.action { background: var(--surface-solid); }
+html.perf-low .dialog-backdrop { background: rgba(3, 5, 10, 0.85); }
+html.perf-low .nav { background: #0e121b; box-shadow: none !important; }
+
+html.perf-low .btn,
+html.perf-low .btn.primary,
+html.perf-low .card-media,
+html.perf-low .toast,
+html.perf-low .dialog,
+html.perf-low .player-skip,
+html.perf-low .detail-poster,
+html.perf-low .bar-thumb { box-shadow: none; }
+html.perf-low .btn.primary { background: var(--accent); }
+html.perf-low .action-icon { background: var(--accent); }
+html.perf-low .bar-played { background: var(--accent); }
+html.perf-low .view-head.hero h1 { background: none; color: var(--text); }
+html.perf-low .detail-backdrop { -webkit-mask-image: none; mask-image: none; opacity: 0.25; }
+html.perf-low .osd-top { background: rgba(0, 0, 0, var(--osd-bg-alpha)); padding-bottom: 1rem; }
+html.perf-low .osd-bottom { background: rgba(0, 0, 0, var(--osd-bg-alpha)); padding-top: 1rem; }
+html.perf-low .img-wrap img { opacity: 1; }
+html.perf-low .live-dot { opacity: 1; }
+html.perf-low .spinner { border-top-color: var(--accent); }
+
+/* Focus: solid outline instead of glow + scale (no relayout, no compositing layers) */
+html.perf-low.mode-tv [data-focus]:focus,
+html.perf-low.mode-tv .card:focus .card-media,
+html.perf-low.mode-tv .card.channel:focus,
+html.perf-low.mode-tv .card.action:focus,
+html.perf-low.mode-tv .osd-btn:focus,
+html.perf-low.mode-tv .player-skip:focus {
+  transform: none !important;
+  box-shadow: none !important;
+  outline: 0.2rem solid var(--accent);
+  outline-offset: 0.12rem;
+}
+html.perf-low.mode-tv .card:focus { outline: none; }
+html.perf-low.mode-tv .osd-btn:focus { background: var(--accent); }
+html.perf-low.mode-tv .osd-bar:focus { outline: none; }
+html.perf-low.mode-tv .osd-bar:focus .bar-thumb { box-shadow: none; outline: 0.2rem solid var(--accent); }
+
+/* Cheaper layout for long lists */
+html.perf-low .card.channel,
+html.perf-low .card.poster { content-visibility: auto; contain-intrinsic-size: 10rem 9rem; }
+html.perf-low .card.poster { contain-intrinsic-size: 10rem 18rem; }
+html.perf-low .card.poster.wide { contain-intrinsic-size: 17rem 12rem; }
+html.perf-low .channel-grid.as-list .card.channel { contain-intrinsic-size: 20rem 3.5rem; }

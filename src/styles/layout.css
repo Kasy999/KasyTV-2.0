@@ -1,0 +1,158 @@
+/* ---------- Shell: side rail (wide / TV) or bottom tab bar (phones) ---------- */
+.shell {
+  position: relative;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* The rail is positioned over the content: expanding it never re-lays out the page (cheap on TV sticks). */
+.nav {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--nav-w) + var(--safe-left));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.25rem;
+  padding: calc(var(--safe-top) + 1rem) 0.5rem 1rem calc(var(--safe-left) + 0.5rem);
+  background: rgba(11, 14, 20, 0.88);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border-right: 1px solid var(--border);
+  z-index: 20;
+  transition: width var(--t) var(--ease);
+  overflow: hidden;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem 0.6rem 1rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.nav-brand img { width: 2.25rem; height: 2.25rem; border-radius: 0.6rem; }
+
+.nav-items { display: flex; flex-direction: column; gap: 0.25rem; flex: 1; }
+
+.nav-item, .nav-mode {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius);
+  color: var(--text-2);
+  white-space: nowrap;
+  transition: background var(--t-fast), color var(--t-fast);
+  position: relative;
+}
+.nav-item .icon, .nav-mode .icon { width: 1.5rem; height: 1.5rem; }
+.nav-item:hover, .nav-mode:hover { background: var(--surface); color: var(--text); }
+.nav-item.active { color: var(--text); background: var(--accent-a18); }
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -0.5rem;
+  top: 25%;
+  bottom: 25%;
+  width: 0.22rem;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(var(--accent), var(--accent-2));
+}
+.nav-label { opacity: 0; transition: opacity var(--t-fast); }
+.nav-brand span { opacity: 0; transition: opacity var(--t-fast); }
+.nav-clock { padding: 0.5rem 0.9rem; color: var(--text-2); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+
+/* Rail expands on hover / when focus is inside (TV) */
+.nav:hover, .nav:focus-within { width: calc(15rem + var(--safe-left)); box-shadow: 1rem 0 3rem rgba(0, 0, 0, 0.5); }
+.nav:hover .nav-label, .nav:focus-within .nav-label,
+.nav:hover .nav-brand span, .nav:focus-within .nav-brand span { opacity: 1; }
+
+.content {
+  height: 100%;
+  margin-left: calc(var(--nav-w) + var(--safe-left));
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.outlet {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: calc(var(--safe-top) + 1rem) calc(var(--safe-right) + var(--page-x)) 2.5rem var(--page-x);
+  scroll-padding: 5rem 0;
+}
+
+.banner-slot { position: relative; z-index: 15; }
+.banner-slot:empty { display: none; }
+
+/* ---------- Phones: bottom tab bar ---------- */
+@media (max-width: 899px) {
+  html.mode-touch .content { margin-left: 0; height: calc(100% - var(--tabbar-h) - var(--safe-bottom)); }
+  html.mode-touch .nav {
+    top: auto;
+    right: 0;
+    width: 100% !important;
+    box-shadow: none !important;
+    height: calc(var(--tabbar-h) + var(--safe-bottom));
+    flex-direction: row;
+    padding: 0 calc(var(--safe-right) + 0.25rem) var(--safe-bottom) calc(var(--safe-left) + 0.25rem);
+    border-right: 0;
+    border-top: 1px solid var(--border);
+    background: rgba(11, 14, 20, 0.82);
+  }
+  html.mode-touch .nav-brand, html.mode-touch .nav-clock, html.mode-touch .nav-mode { display: none; }
+  html.mode-touch .nav-items { flex-direction: row; justify-content: space-around; gap: 0; }
+  html.mode-touch .nav-item {
+    flex: 1;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.55rem 0.1rem 0.4rem;
+    font-size: 0.68rem;
+    border-radius: 0.6rem;
+    background: none !important;
+  }
+  html.mode-touch .nav-item.active { color: var(--accent); }
+  html.mode-touch .nav-item.active::before { display: none; }
+  html.mode-touch .nav-label { opacity: 1; }
+  html.mode-touch .outlet { padding-bottom: 1.5rem; }
+  :root { --page-x: 1rem; }
+  html.mode-touch .head-actions { width: 100%; }
+  html.mode-touch .head-actions .input.search { order: 10; flex: 1 1 100%; max-width: none; }
+  html.mode-touch .head-actions .source-chip { flex: 1 1 auto; max-width: none; }
+  h1 { font-size: 1.5rem; }
+}
+
+/* While the player is open, the shell is inert underneath. */
+html.player-open .shell { visibility: hidden; }
+
+/* ---------- Views ---------- */
+.view { max-width: 120rem; margin: 0 auto; }
+
+.view-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.view-head h1 { flex: 1 1 auto; min-width: 8rem; }
+.view-head.hero { padding: 0.5rem 0 0.25rem; }
+.view-head.hero h1 {
+  font-size: 2rem;
+  background: linear-gradient(90deg, var(--text), #b9c6ff 60%, var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.head-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.back-btn { margin-right: 0.25rem; }
+
+.rows { display: flex; flex-direction: column; gap: 1.75rem; }

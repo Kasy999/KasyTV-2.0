@@ -1,0 +1,1 @@
+Optional: Lampa-Build (github.com/yumata/lampa) hierher kopieren und in Kasy TV unter Einstellungen → Lampa die Quelle „Lokal“ wählen.

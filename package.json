@@ -1,0 +1,25 @@
+{
+  "name": "kasy-tv-pwa",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Kasy TV – Streaming-Hub als Progressive Web App (iOS, Browser, Smart-TV, Xiaomi TV Stick)",
+  "type": "module",
+  "scripts": {
+    "postinstall": "node scripts/copy-vendor.mjs",
+    "dev": "vite --host",
+    "build": "node scripts/copy-vendor.mjs && vite build",
+    "preview": "vite preview --host",
+    "serve": "node tools/serve.mjs dist",
+    "serve:src": "node tools/serve.mjs .",
+    "test": "node --test tests/m3u-parser.test.mjs tests/adblock.test.mjs"
+  },
+  "dependencies": {
+    "hls.js": "^1.5.17",
+    "mpegts.js": "^1.7.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-legacy": "^5.4.3",
+    "terser": "^5.36.0",
+    "vite": "^5.4.11"
+  }
+}

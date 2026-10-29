@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="de" class="boot">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>Kasy TV</title>
+    <meta name="description" content="Kasy TV – IPTV, Jellyfin, Lampa und YouTube als Web-App" />
+    <meta name="theme-color" content="#0B0E14" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Kasy TV" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="./src/styles/index.css" />
+    <style>
+      /* Shown until the app has mounted – keeps the homescreen start from flashing white. */
+      html.boot, html.boot body { background: #0b0e14; }
+      #boot-splash { position: fixed; inset: 0; display: grid; place-items: center; background: #0b0e14; z-index: 9999; }
+      #boot-splash img { width: 96px; height: 96px; border-radius: 22px; }
+      html:not(.boot) #boot-splash { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="boot-splash"><img src="./icons/icon-192.png" alt="" /></div>
+    <div id="app" aria-live="polite"></div>
+    <noscript>Kasy TV benötigt JavaScript.</noscript>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
