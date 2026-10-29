@@ -15,6 +15,7 @@ import { SB_CATEGORIES } from '../services/sponsorblock.js';
 import { DEFAULT_HOSTS, blockedTotal } from '../services/adblock.js';
 import * as iptv from '../services/iptv.js';
 import * as jf from '../services/jellyfin.js';
+import * as yt from '../services/youtube.js';
 import { exportBackup, importBackup, daysSinceBackup } from '../services/backup.js';
 import { jellyfinLoginForm } from './library.js';
 import { uploadPlaylistFlow, addUrlFlow, pickPlaylistFile } from './live.js';
@@ -386,13 +387,56 @@ const BUILDERS = {
     ];
   },
 
-  async youtube() {
+  async youtube(render) {
+    const status = h('p.form-status');
+    const cur = yt.currentInstance();
     return [
       section(
-        'YouTube',
-        textRow('API-Schlüssel (für die Suche)', 'YouTube Data API v3 – kostenlos in der Google Cloud Console. Links und IDs funktionieren auch ohne.', 'youtube.apiKey', { mask: true, placeholder: 'nicht gesetzt' }),
-        toggleRow('Datenschutzmodus (youtube-nocookie.com)', null, 'youtube.noCookie'),
-        h('p.hint', 'Videos laufen im offiziellen YouTube-Player; SponsorBlock steuert ihn von außen. Werbung, die YouTube selbst im Player einblendet, kann eine Web-App nicht entfernen.'),
+        'Werbefreie Wiedergabe',
+        h('p.set-desc', 'YouTube läuft über eine Invidious-Instanz (Open-Source-Frontend): keine YouTube-Werbung, kein Google-Konto, Videos im Kasy-Player mit SponsorBlock und Untertitel-Stilen. Abos, „Später ansehen“ und Verlauf bleiben auf diesem Gerät.'),
+        selectRow('Server', null, 'youtube.backend', [
+          { value: 'auto', label: 'Automatisch', description: 'Öffentliche Instanzen, Wechsel bei Ausfall' },
+          { value: 'custom', label: 'Eigene Instanz', description: 'Am zuverlässigsten (selbst gehostet)' },
+        ], { onChange: () => (yt.resetInstances(), render()) }),
+        textRow('Eigene Instanz', 'z. B. https://invidious.meine-domain.de – wird bei „Automatisch“ zuerst versucht', 'youtube.instance', { placeholder: 'https://…', type: 'url', onChange: () => (yt.resetInstances(), render()) }),
+        infoRow('Aktuell verbunden', cur || 'noch keine Anfrage'),
+        actionRow('Verbindung testen', null, 'Testen', async () => {
+          status.textContent = 'Teste …';
+          status.className = 'form-status';
+          try {
+            yt.resetInstances();
+            const n = (await yt.trending()).length;
+            status.textContent = `OK – ${n} Videos von ${yt.currentInstance()}`;
+            status.classList.add('ok');
+          } catch (e) {
+            status.textContent = e.message;
+            status.classList.add('error');
+          }
+        }, { iconName: 'refresh' }),
+        status,
+      ),
+      section(
+        'Wiedergabe',
+        toggleRow('Hohe Qualität (DASH)', 'HD bis 4K mit dash.js auf Android TV, Xiaomi-Stick, Desktop; sonst MP4 bis 720p/360p.', 'youtube.highQuality'),
+        toggleRow('Nächstes Video automatisch', 'Nach dem Ende startet ein ähnliches Video (10 s Countdown)', 'youtube.autoplayNext'),
+        toggleRow('Ersatz: offizieller Player', 'Wenn kein werbefreier Stream verfügbar ist, im offiziellen YouTube-Player abspielen (SponsorBlock bleibt aktiv).', 'youtube.fallbackEmbed'),
+        toggleRow('Datenschutzmodus im offiziellen Player', 'youtube-nocookie.com', 'youtube.noCookie'),
+      ),
+      section(
+        'Inhalte',
+        toggleRow('Shorts ausblenden', null, 'youtube.hideShorts'),
+        selectRow('Region für Trends', null, 'youtube.region', [
+          { value: 'DE', label: 'Deutschland' },
+          { value: 'AT', label: 'Österreich' },
+          { value: 'CH', label: 'Schweiz' },
+          { value: 'US', label: 'USA' },
+          { value: 'GB', label: 'Großbritannien' },
+          { value: 'RU', label: 'Russland' },
+          { value: 'UA', label: 'Ukraine' },
+          { value: 'FR', label: 'Frankreich' },
+          { value: 'ES', label: 'Spanien' },
+        ]),
+        actionRow('SponsorBlock-Kategorien', 'Sponsoren, Intros, Eigenwerbung …', 'Öffnen', () => navigate('/settings/blocker'), { iconName: 'shield' }),
       ),
     ];
   },

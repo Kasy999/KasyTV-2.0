@@ -11,6 +11,10 @@ const LIBS = {
     global: 'mpegts',
     urls: ['./vendor/mpegts.js', 'https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js'],
   },
+  dash: {
+    global: 'dashjs',
+    urls: ['./vendor/dash.all.min.js', 'https://cdn.jsdelivr.net/npm/dashjs@4.7.4/dist/dash.all.min.js'],
+  },
   youtube: {
     global: 'YT',
     urls: ['https://www.youtube.com/iframe_api'],

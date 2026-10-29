@@ -12,7 +12,7 @@ import { homeView } from './views/home.js';
 import { liveView } from './views/live.js';
 import { libraryView, libraryDetailView, libraryBrowseView } from './views/library.js';
 import { lampaView } from './views/lampa.js';
-import { youtubeView } from './views/youtube.js';
+import { youtubeView, youtubeSearchView, youtubeWatchView, youtubeChannelView } from './views/youtube.js';
 import { settingsView } from './views/settings.js';
 
 const NAV = [
@@ -109,6 +109,9 @@ export function mountApp(root) {
   defineRoute('/library/item/:id', libraryDetailView);
   defineRoute('/lampa', lampaView);
   defineRoute('/youtube', youtubeView);
+  defineRoute('/youtube/search', youtubeSearchView);
+  defineRoute('/youtube/watch/:id', youtubeWatchView);
+  defineRoute('/youtube/channel/:id', youtubeChannelView);
   defineRoute('/settings/:section?', settingsView);
 
   const start = store.get('ui.startView') || 'home';

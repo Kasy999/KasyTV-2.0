@@ -41,7 +41,8 @@ export class VideoEngine {
     this.cb = { onAdBreak, onAdsRemoved, onLevels, onTracks, onFatal };
     this.hls = null;
     this.mpegts = null;
-    this.kind = null; // 'hlsjs' | 'mpegts' | 'native'
+    this.kind = null; // 'hlsjs' | 'mpegts' | 'dash' | 'native'
+    this.dash = null;
     this.adState = { inAd: false };
     this.token = 0;
   }
@@ -64,6 +65,8 @@ export class VideoEngine {
         return mse ? ['mpegts', 'native'] : ['native'];
       case 'file':
         return ['native'];
+      case 'dash':
+        return mse ? ['dash'] : [];
       default:
         return appleFirst ? ['native', 'hlsjs'] : mse ? ['hlsjs', 'mpegts', 'native'] : ['native'];
     }
@@ -134,6 +137,30 @@ export class VideoEngine {
             if (token !== this.token || settled) return;
             if (!Hls.isSupported()) return done(new Error('hls.js wird nicht unterstützt'));
             this.startHls(Hls, url, src, done);
+          })
+          .catch((e) => done(e));
+        return;
+      }
+      if (kind === 'dash') {
+        loadLib('dash')
+          .then((dashjs) => {
+            if (token !== this.token || settled) return;
+            const p = dashjs.MediaPlayer().create();
+            this.dash = p;
+            p.updateSettings({
+              debug: { logLevel: dashjs.Debug ? dashjs.Debug.LOG_LEVEL_WARNING : 2 },
+              streaming: {
+                buffer: { bufferTimeAtTopQuality: perf.low ? 12 : 30, bufferTimeAtTopQualityLongForm: perf.low ? 20 : 60 },
+                abr: { limitBitrateByPortal: perf.low },
+              },
+            });
+            p.on(dashjs.MediaPlayer.events.ERROR, (ev) => {
+              const err = new Error('DASH: ' + ((ev.error && (ev.error.message || ev.error.code)) || 'Fehler'));
+              if (!settled) done(err);
+              else if (this.cb.onFatal) this.cb.onFatal(err);
+            });
+            p.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => this.emitLevels());
+            p.initialize(v, url, false, src.startSeconds > 0 ? src.startSeconds : undefined);
           })
           .catch((e) => done(e));
         return;
@@ -250,6 +277,13 @@ export class VideoEngine {
   }
 
   qualities() {
+    if (this.dash) {
+      try {
+        return this.dash.getBitrateInfoListFor('video').map((b) => ({ id: b.qualityIndex, label: (b.height ? b.height + 'p' : '') + ` · ${(b.bitrate / 1e6).toFixed(1)} Mbit/s`, height: b.height }));
+      } catch {
+        return [];
+      }
+    }
     if (!this.hls || !this.hls.levels) return [];
     return this.hls.levels.map((l, i) => ({
       id: i,
@@ -259,10 +293,22 @@ export class VideoEngine {
   }
 
   get currentQuality() {
+    if (this.dash) {
+      try {
+        return this.dash.getSettings().streaming.abr.autoSwitchBitrate.video ? -1 : this.dash.getQualityFor('video');
+      } catch {
+        return -1;
+      }
+    }
     return this.hls ? (this.hls.autoLevelEnabled ? -1 : this.hls.currentLevel) : -1;
   }
 
   setQuality(id) {
+    if (this.dash) {
+      this.dash.updateSettings({ streaming: { abr: { autoSwitchBitrate: { video: id === -1 } } } });
+      if (id !== -1) this.dash.setQualityFor('video', id, true);
+      return;
+    }
     if (!this.hls) return;
     this.hls.currentLevel = id; // -1 = auto
   }
@@ -309,6 +355,14 @@ export class VideoEngine {
         /* ignore */
       }
       this.hls = null;
+    }
+    if (this.dash) {
+      try {
+        this.dash.reset();
+      } catch {
+        /* ignore */
+      }
+      this.dash = null;
     }
     if (this.mpegts) {
       try {

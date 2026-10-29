@@ -47,7 +47,13 @@ export const DEFAULTS = {
     source: 'remote', // remote | local
   },
   youtube: {
-    apiKey: '',
+    backend: 'auto', // auto (public Invidious instances) | custom
+    instance: '', // own Invidious instance, e.g. https://invidious.example.org
+    region: 'DE',
+    highQuality: true, // DASH (HD/4K) where the device supports MSE
+    hideShorts: false,
+    autoplayNext: true,
+    fallbackEmbed: true, // official YouTube player when no ad-free stream works
     noCookie: true,
   },
   player: {

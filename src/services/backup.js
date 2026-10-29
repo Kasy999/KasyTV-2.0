@@ -14,7 +14,7 @@ export async function buildBackup({ includePlaylists = true, includeCredentials 
   const settings = store.snapshot();
   if (!includeCredentials) {
     settings.jellyfin = { ...settings.jellyfin, token: '', userId: '' };
-    settings.youtube = { ...settings.youtube, apiKey: '' };
+    settings.youtube = { ...settings.youtube };
   }
   const kv = {};
   for (const [key, value] of await db.entries()) {

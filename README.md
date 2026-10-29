@@ -93,14 +93,25 @@ läuft Lampa als normales iframe. Zustand bleibt beim Tab-Wechsel erhalten.
 Lokal mitliefern: den Lampa-Build (github.com/yumata/lampa) nach `public/lampa/` kopieren und unter
 Einstellungen → Lampa die Quelle „Lokal“ wählen.
 
+### YouTube (werbefrei)
+Eigener YouTube-Bereich wie in einer YouTube-App: **Start** (Angesagt, Musik, Gaming, Filme), **Suche** mit
+Vorschlägen beim Tippen, **Kanäle**, **Abos** mit Feed der neuesten Videos, **Später ansehen**, **Verlauf**, Videoseite
+mit Beschreibung und ähnlichen Videos, nächstes Video automatisch. Daten kommen von einer
+[Invidious](https://invidious.io)-Instanz (Open-Source-Frontend), die Videos laufen im **Kasy-Player ohne
+YouTube-Werbung** – mit SponsorBlock, Untertitel-Stilen, Fernbedienung und Gesten. HD/4K per DASH (dash.js) auf
+Android TV, Xiaomi-Stick und Desktop, sonst MP4. Abos/Verlauf bleiben lokal (im Backup enthalten), kein Google-Konto.
+Server: „Automatisch“ wählt eine erreichbare öffentliche Instanz und wechselt bei Ausfall; am zuverlässigsten ist
+eine **eigene Instanz** (Einstellungen → YouTube). Liefert keine Instanz einen Stream, springt auf Wunsch der
+offizielle YouTube-Player ein (dort kann YouTube Werbung zeigen, SponsorBlock bleibt aktiv).
+
 ### Werbeblocker & SponsorBlock
 * Netzwerk-Sperre (fetch/XHR/Bilder) für 60+ Werbe-/Tracking-Domains + eigene Regeln (`||host^`, Hosts-Datei,
   Textteile) – für die App und das integrierte Lampa.
 * **HLS-Werbepausen:** VOD-Playlists verlieren markierte Werbeblöcke (`#EXT-X-CUE-OUT/IN`, SCTE-35, Apple
   Interstitials, Segmente von Werbe-Hosts). Bei Live-Streams werden Werbepausen stummgeschaltet und abgedeckt.
-* **SponsorBlock** für YouTube (eigener Bereich, YouTube-Links in Playlists, Jellyfin-/Lampa-Trailer): je
+* **SponsorBlock** für YouTube (YouTube-Bereich, YouTube-Links in Playlists, Jellyfin-/Lampa-Trailer): je
   Kategorie *überspringen*, *Knopf zeigen*, *stumm* oder *ignorieren*. Datenschutzfreundliche Hash-Abfrage.
-* Grenzen: Werbung, die YouTube **im eigenen Player** zeigt, und Inhalte fremder iframes kann keine Web-App
+* Grenzen: nur im Ersatz-Fall (offizieller YouTube-Player) und in fremden iframes kann keine Web-App Werbung
   entfernen.
 
 ### Zeichen-Typ-Bereich (Einstellungen → Zeichen & Untertitel)
