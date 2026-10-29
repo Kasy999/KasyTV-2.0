@@ -22,7 +22,6 @@ import { toast } from '../components/toast.js';
 import { SegmentSkipper, fetchSponsorSegments, youtubeId } from '../services/sponsorblock.js';
 import * as iptv from '../services/iptv.js';
 import * as jf from '../services/jellyfin.js';
-import * as yt from '../services/youtube.js';
 import { getResume, saveResume } from '../services/resume.js';
 import { COLORS, FONTS } from '../services/text-style.js';
 
@@ -178,6 +177,7 @@ class Player {
       this.root.focus({ preventScroll: true });
       this.requestWakeLock();
       if (inputMode.isTV() && store.get('ui.inputMode') !== 'touch') this.enterFullscreen(true);
+      bus.emit('player:opened');
     }
     this.root.classList.toggle('is-live', session.kind === 'channel' && (!session.channels[session.index] || session.channels[session.index].kind !== 'vod'));
     this.root.classList.remove('is-youtube'); // set only when the official embedded player is used
@@ -351,66 +351,27 @@ class Player {
       .catch(() => {});
   }
 
-  /**
-   * YouTube: ad-free stream from the Invidious instance in the Kasy player (DASH/HLS/MP4) – SponsorBlock,
-   * subtitle styles and all player features apply. Falls back to the official embedded player if no stream works.
-   */
+  /** YouTube trailers / links: official embedded player, SponsorBlock on top. */
   async startYouTube(s, token) {
     this.root.classList.remove('is-live');
-    let played = false;
-    if (!s.forceEmbed) {
+    this.video.hidden = true;
+    this.engine.destroy();
+    this.yt = new YouTubeMedia(this.ytHost);
+    this.root.classList.add('is-youtube');
+    await this.yt.load(s.id, s.startSeconds || 0);
+    if (token !== this.loadToken) return;
+    if (!s.title || s.title === 'YouTube-Video') {
       try {
-        const d = s.details && s.details.streams ? s.details : await yt.videoDetails(s.id);
-        if (token !== this.loadToken) return;
-        s.details = d;
-        s.title = d.title;
-        s.channel = d.author;
-        this.updateHeader();
-        if (!d.streams.length) throw new Error('keine Streams');
-        const start = s.startSeconds || (store.get('player.resume') && !d.live ? await getResume('yt:' + s.id) : 0);
-        let lastErr = null;
-        for (const st of d.streams) {
-          try {
-            this.video.hidden = false;
-            await this.engine.load({ url: st.url, type: st.type, live: d.live, startSeconds: start });
-            s.stream = st;
-            played = true;
-            break;
-          } catch (e) {
-            lastErr = e;
-            if (token !== this.loadToken) return;
-          }
+        const data = this.yt.player.getVideoData();
+        if (data && data.title) {
+          s.title = data.title;
+          s.channel = data.author;
+          this.updateHeader();
         }
-        if (!played) throw lastErr || new Error('Stream nicht abspielbar');
-        if (start > 5) toast('Fortgesetzt bei ' + formatTime(start));
-        this.currentUrl = 'yt:' + s.id;
-      } catch (e) {
-        if (token !== this.loadToken) return;
-        console.warn('[youtube] werbefreier Stream nicht verfügbar:', e.message);
-        if (!store.get('youtube.fallbackEmbed')) throw new Error('Werbefreier Stream nicht verfügbar: ' + e.message);
-        toast('Werbefreier Stream gerade nicht verfügbar – offizieller Player (SponsorBlock aktiv)', { kind: 'warn', duration: 4500 });
+      } catch {
+        /* ignore */
       }
     }
-    if (!played) {
-      this.video.hidden = true;
-      this.engine.destroy();
-      this.yt = new YouTubeMedia(this.ytHost);
-      this.root.classList.add('is-youtube');
-      await this.yt.load(s.id, s.startSeconds || 0);
-      if (token !== this.loadToken) return;
-      if (!s.title || s.title === 'YouTube-Video') {
-        try {
-          const data = this.yt.player.getVideoData();
-          if (data && data.title) {
-            s.title = data.title;
-            s.channel = data.author;
-            this.updateHeader();
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-    } else this.root.classList.remove('is-youtube');
     this.skipper = new SegmentSkipper(this.adapter(), (ui) => this.onSkipUi(ui));
     fetchSponsorSegments(s.id).then((segs) => {
       if (this.skipper && this.session === s && segs.length) {
@@ -418,7 +379,6 @@ class Player {
         toast(`SponsorBlock: ${segs.length} Segment${segs.length > 1 ? 'e' : ''} gefunden`, { iconName: 'shield' });
       }
     });
-    yt.addYtHistory({ id: s.id, title: s.title || 'YouTube-Video', author: s.channel || '', authorId: s.details && s.details.authorId, duration: s.details && s.details.duration }).catch(() => {});
   }
 
   adapter() {
@@ -503,10 +463,6 @@ class Player {
       const next = await jf.nextEpisode(s.item).catch(() => null);
       if (next && this.session === s) return this.offerNext(next);
     }
-    if (s.kind === 'youtube' && store.get('youtube.autoplayNext') && s.details && s.details.related.length) {
-      const nextVid = s.details.related.find((r) => !r.live) || s.details.related[0];
-      return this.offerNext({ youtube: nextVid });
-    }
     if (s.kind === 'channel' && s.channels[s.index].kind !== 'vod') {
       // live stream ended – try to reconnect once
       this.start();
@@ -521,18 +477,17 @@ class Player {
     const go = () => {
       clearInterval(this.nextTimer);
       this.nextCard.classList.remove('show');
-      if (next.youtube) this.open({ kind: 'youtube', id: next.youtube.id, title: next.youtube.title });
-      else this.open({ kind: 'jellyfin', item: next, startMs: 0 });
+      this.open({ kind: 'jellyfin', item: next, startMs: 0 });
     };
     const cancel = () => {
       clearInterval(this.nextTimer);
       this.nextCard.classList.remove('show');
       this.showOsd(true);
     };
-    const title = next.youtube ? next.youtube.title : (next.SeriesName ? `S${next.ParentIndexNumber || '?'}E${next.IndexNumber || '?'} · ` : '') + next.Name;
+    const title = (next.SeriesName ? `S${next.ParentIndexNumber || '?'}E${next.IndexNumber || '?'} · ` : '') + next.Name;
     const playBtn = h('button.btn.primary', { type: 'button', data: { focus: true }, onClick: go }, icon('play'), h('span.btn-label', 'Jetzt abspielen'));
     this.nextCard.replaceChildren(
-      h('div.next-info', h('div.muted', next.youtube ? 'Nächstes Video' : 'Nächste Folge'), h('div.next-title', title), label),
+      h('div.next-info', h('div.muted', 'Nächste Folge'), h('div.next-title', title), label),
       h('div.next-actions', playBtn, h('button.btn.ghost', { type: 'button', data: { focus: true }, onClick: cancel }, h('span.btn-label', 'Abbrechen'))),
     );
     this.nextCard.classList.add('show');
@@ -548,7 +503,7 @@ class Player {
 
   savePosition() {
     const s = this.session;
-    if (!s || !this.isVod() || s.kind === 'jellyfin' || (s.kind === 'youtube' && this.yt)) return;
+    if (!s || !this.isVod() || s.kind === 'jellyfin' || s.kind === 'youtube') return;
     if (this.currentUrl) saveResume(this.currentUrl, this.time(), this.duration()).catch(() => {});
   }
 
@@ -569,7 +524,7 @@ class Player {
       sub = it.SeriesName ? `S${it.ParentIndexNumber || '?'}E${it.IndexNumber || '?'} · ${it.Name}` : [it.ProductionYear, jf.formatRuntime(it.RunTimeTicks)].filter(Boolean).join(' · ');
     } else if (s.kind === 'youtube') {
       title = s.title || 'YouTube';
-      sub = [s.channel, this.yt ? 'offizieller Player' : 'werbefrei', 'SponsorBlock ' + (store.get('blocker.sponsorblock.enabled') ? 'an' : 'aus')].filter(Boolean).join(' · ');
+      sub = [s.channel, 'SponsorBlock ' + (store.get('blocker.sponsorblock.enabled') ? 'an' : 'aus')].filter(Boolean).join(' · ');
     } else {
       title = s.title || 'Stream';
       sub = s.subtitle || '';
@@ -784,10 +739,6 @@ class Player {
       for (const t of s.pb.subtitles) options.push({ value: 'jf:' + t.index, label: t.label + (t.burnIn ? ' (wird eingebrannt)' : ''), description: t.forced ? 'Erzwungen' : undefined });
       if (s.pb.subtitleIndex !== undefined && s.pb.subtitleIndex >= 0) current = 'jf:' + s.pb.subtitleIndex;
     }
-    if (s.kind === 'youtube' && s.details && !this.yt) {
-      s.details.captions.forEach((c, i) => options.push({ value: 'yc:' + i, label: c.label }));
-      if (s.captionIndex !== undefined) current = 'yc:' + s.captionIndex;
-    }
     const tracks = this.engine.textTracks();
     tracks.forEach((t, i) => options.push({ value: 'tt:' + i, label: t.label || t.language || 'Spur ' + (i + 1) }));
     if (this.subs.track) {
@@ -801,22 +752,10 @@ class Player {
     if (v === 'off') {
       this.subs.clear();
       this.engine.enableHlsSubtitles(false);
-      s.captionIndex = undefined;
       if (s.kind === 'jellyfin' && s.pb) {
         const wasBurned = (s.pb.subtitles.find((x) => x.index === s.pb.subtitleIndex) || {}).burnedNow;
         s.pb.subtitleIndex = -1;
         if (wasBurned) this.reloadJellyfin({ subtitleIndex: -1, audioIndex: s.pb.audioIndex });
-      }
-      return;
-    }
-    if (v.startsWith('yc:')) {
-      const i = parseInt(v.slice(3), 10);
-      s.captionIndex = i;
-      try {
-        const n = await this.subs.loadUrl(s.details.captions[i].url);
-        toast(`Untertitel geladen (${n} Einträge)`);
-      } catch (e) {
-        toast(e.message, { kind: 'error' });
       }
       return;
     }
@@ -873,7 +812,7 @@ class Player {
       }
       return;
     }
-    if (s.kind === 'youtube' && this.yt) {
+    if (s.kind === 'youtube') {
       const levels = this.yt && this.yt.player.getAvailableQualityLevels ? this.yt.player.getAvailableQualityLevels() : [];
       if (!levels.length) return toast('YouTube wählt die Qualität automatisch');
       const v = await pickOption('Qualität', levels.map((l) => ({ value: l, label: l })), this.yt.player.getPlaybackQuality());
@@ -924,8 +863,7 @@ class Player {
       const l = this.engine.hls.levels[this.engine.hls.currentLevel];
       rows.push(['Bitrate', (l.bitrate / 1e6).toFixed(2) + ' Mbit/s']);
     }
-    const url = s.kind === 'channel' ? s.channels[s.index].url : s.url || (s.pb && s.pb.url) || (s.stream && s.stream.url) || '';
-    if (s.stream) rows.push(['YouTube-Stream', s.stream.label + ' über ' + (s.details ? s.details.instance : '')]);
+    const url = s.kind === 'channel' ? s.channels[s.index].url : s.url || (s.pb && s.pb.url) || '';
     if (url) rows.push(['Adresse', url.replace(/api_key=[^&]+/, 'api_key=…')]);
     dialog({ title: 'Stream-Info', body: h('dl.info-list', rows.map(([k, val]) => [h('dt', k), h('dd', val)])), actions: [{ label: 'OK', primary: true }] });
   }
@@ -1363,8 +1301,8 @@ export function playJellyfin(item, { startMs } = {}) {
   return player().open({ kind: 'jellyfin', item, startMs: start || 0 });
 }
 
-export function playYouTube(id, { title, startSeconds, details, forceEmbed } = {}) {
-  return player().open({ kind: 'youtube', id, title, startSeconds, details, forceEmbed });
+export function playYouTube(id, { title, startSeconds } = {}) {
+  return player().open({ kind: 'youtube', id, title, startSeconds });
 }
 
 export function isPlayerOpen() {

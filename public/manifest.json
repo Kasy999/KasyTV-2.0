@@ -1,7 +1,7 @@
 {
   "name": "Kasy TV",
   "short_name": "Kasy TV",
-  "description": "IPTV, Jellyfin, Lampa und YouTube – ein Streaming-Hub für Smartphone, Browser und Fernseher.",
+  "description": "IPTV, Jellyfin und Lampa – ein Streaming-Hub für Smartphone, Browser und Fernseher.",
   "id": "./",
   "start_url": "./#/home",
   "scope": "./",

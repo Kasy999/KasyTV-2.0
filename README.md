@@ -73,6 +73,9 @@ Jellyfin im Heimnetz (`http://192.168…:8096`), HTTP-Playlists und HTTP-Streams
   Große Listen (50 000 Sender < 0,5 s) werden in einem Web Worker gelesen.
 * **Datei-Upload** (`<input type="file" accept=".m3u,.m3u8,…">`) – auf dem iPhone aus „Dateien“, iCloud Drive,
   Downloads. Falls iOS die Datei ausgraut: „Alle Dateitypen“ wählen.
+* **Live-Vorschau** des markierten Senders neben der Liste (Fernbedienung: Sender markieren → läuft nach kurzer
+  Pause; Touch: erster Tipp = Vorschau, zweiter Tipp = Vollbild). Stoppt automatisch, wenn der Vollbild-Player
+  läuft, damit TV-Sticks nie zwei Streams gleichzeitig dekodieren.
 * Mehrere Quellen (URL oder Datei), Kategorien, Suche, Favoriten, zuletzt gesehen, Kachel-/Listenansicht,
   Sortierung, automatische Aktualisierung von URL-Quellen.
 * Player: **hls.js** (Android TV, Xiaomi-Stick, Chrome, Smart-TVs), natives HLS (iOS/Safari), **mpegts.js** für
@@ -87,32 +90,20 @@ Intro-Skipper-Plugin.
 
 ### Lampa
 Lampa (oder ein Wampa-/eigener Lampa-Server) läuft als integriertes Modul: die Seite wird geladen und mit einem
-Hook in einen Rahmen gleicher Herkunft geschrieben – Werbeblocker greift, Trailer laufen im Kasy-YouTube-Player mit
+Hook in einen Rahmen gleicher Herkunft geschrieben – Werbeblocker greift, Trailer laufen im Kasy-Player (offizieller YouTube-Player) mit
 SponsorBlock, Lampas „Beenden?“-Frage führt zur Navigation. Erlaubt der Lampa-Server das Laden nicht (CORS),
 läuft Lampa als normales iframe. Zustand bleibt beim Tab-Wechsel erhalten.
 Lokal mitliefern: den Lampa-Build (github.com/yumata/lampa) nach `public/lampa/` kopieren und unter
 Einstellungen → Lampa die Quelle „Lokal“ wählen.
-
-### YouTube (werbefrei)
-Eigener YouTube-Bereich wie in einer YouTube-App: **Start** (Angesagt, Musik, Gaming, Filme), **Suche** mit
-Vorschlägen beim Tippen, **Kanäle**, **Abos** mit Feed der neuesten Videos, **Später ansehen**, **Verlauf**, Videoseite
-mit Beschreibung und ähnlichen Videos, nächstes Video automatisch. Daten kommen von einer
-[Invidious](https://invidious.io)-Instanz (Open-Source-Frontend), die Videos laufen im **Kasy-Player ohne
-YouTube-Werbung** – mit SponsorBlock, Untertitel-Stilen, Fernbedienung und Gesten. HD/4K per DASH (dash.js) auf
-Android TV, Xiaomi-Stick und Desktop, sonst MP4. Abos/Verlauf bleiben lokal (im Backup enthalten), kein Google-Konto.
-Server: „Automatisch“ wählt eine erreichbare öffentliche Instanz und wechselt bei Ausfall; am zuverlässigsten ist
-eine **eigene Instanz** (Einstellungen → YouTube). Liefert keine Instanz einen Stream, springt auf Wunsch der
-offizielle YouTube-Player ein (dort kann YouTube Werbung zeigen, SponsorBlock bleibt aktiv).
 
 ### Werbeblocker & SponsorBlock
 * Netzwerk-Sperre (fetch/XHR/Bilder) für 60+ Werbe-/Tracking-Domains + eigene Regeln (`||host^`, Hosts-Datei,
   Textteile) – für die App und das integrierte Lampa.
 * **HLS-Werbepausen:** VOD-Playlists verlieren markierte Werbeblöcke (`#EXT-X-CUE-OUT/IN`, SCTE-35, Apple
   Interstitials, Segmente von Werbe-Hosts). Bei Live-Streams werden Werbepausen stummgeschaltet und abgedeckt.
-* **SponsorBlock** für YouTube (YouTube-Bereich, YouTube-Links in Playlists, Jellyfin-/Lampa-Trailer): je
+* **SponsorBlock** für YouTube (YouTube-Links in Playlists, Jellyfin-/Lampa-Trailer im offiziellen Player): je
   Kategorie *überspringen*, *Knopf zeigen*, *stumm* oder *ignorieren*. Datenschutzfreundliche Hash-Abfrage.
-* Grenzen: nur im Ersatz-Fall (offizieller YouTube-Player) und in fremden iframes kann keine Web-App Werbung
-  entfernen.
+* Grenzen: Werbung im offiziellen YouTube-Player (Trailer) und in fremden iframes kann keine Web-App entfernen.
 
 ### Zeichen-Typ-Bereich (Einstellungen → Zeichen & Untertitel)
 Untertitel: Schrift (7 Schriften der Android-App + System), Größe, Stärke, Kursiv, Großbuchstaben, Text-/

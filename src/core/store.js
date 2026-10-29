@@ -18,13 +18,15 @@ export const DEFAULTS = {
     accent2: '#8B5CF6',
     startView: 'home',
     showClock: true,
-    modules: { live: true, library: true, lampa: true, youtube: true },
+    modules: { live: true, library: true, lampa: true },
     homeRows: { continue: true, recentChannels: true, favorites: true, latest: true },
   },
   iptv: {
     sources: [], // { id, name, type: 'url'|'file', url, fileName, count, updatedAt }
     activeSourceId: null,
     view: 'grid', // grid | list
+    preview: true, // live preview of the highlighted channel
+    previewSound: false,
     sort: 'default', // default | name | number
     lastGroup: '__all',
     corsProxy: '', // e.g. http://192.168.1.10:8080/proxy?url={url}
@@ -47,14 +49,7 @@ export const DEFAULTS = {
     source: 'remote', // remote | local
   },
   youtube: {
-    backend: 'auto', // auto (public Invidious instances) | custom
-    instance: '', // own Invidious instance, e.g. https://invidious.example.org
-    region: 'DE',
-    highQuality: true, // DASH (HD/4K) where the device supports MSE
-    hideShorts: false,
-    autoplayNext: true,
-    fallbackEmbed: true, // official YouTube player when no ad-free stream works
-    noCookie: true,
+    noCookie: true, // trailers play in the official player (youtube-nocookie.com)
   },
   player: {
     engine: 'auto', // auto | hlsjs | native

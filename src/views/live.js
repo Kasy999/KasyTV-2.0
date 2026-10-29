@@ -10,6 +10,8 @@ import { pickOption, promptDialog, dialog } from '../components/dialog.js';
 import { toast } from '../components/toast.js';
 import * as iptv from '../services/iptv.js';
 import { playChannel, playUrl } from '../player/player.js';
+import { PreviewPanel } from '../player/preview.js';
+import { inputMode } from '../core/input-mode.js';
 
 export const M3U_ACCEPT = '.m3u,.m3u8,audio/x-mpegurl,audio/mpegurl,application/x-mpegurl,application/vnd.apple.mpegurl,text/plain';
 
@@ -152,12 +154,23 @@ export async function liveView(el, { query }) {
   const grid = h('div.channel-grid', { data: { focusGroup: true } });
   const info = h('div.list-info.muted');
 
+  const previewOn = store.get('iptv.preview') !== false;
+  const preview = previewOn ? new PreviewPanel({ onOpen: (i) => i >= 0 && list[i] && playChannel(source.id, list, i) }) : null;
   el.append(
     h('header.view-head', h('h1', 'Live-TV'), h('div.head-actions', { data: { focusGroup: true } }, sourceBtn, search, sortBtn, viewBtn, addBtn)),
     chips,
-    info,
-    grid,
+    h('div.live-layout' + (preview ? '.with-preview' : ''), preview ? preview.el : null, h('div.live-list', info, grid)),
   );
+  // Remote: the focused channel plays in the preview after a short pause.
+  if (preview) {
+    grid.addEventListener('focusin', (e) => {
+      if (!inputMode.isTV()) return;
+      const card = e.target.closest && e.target.closest('.card.channel');
+      if (!card) return;
+      const i = parseInt(card.dataset.index, 10);
+      if (list[i]) preview.show(list[i], i);
+    });
+  }
 
   let playlist = null;
   let favs = new Set();
@@ -201,17 +214,30 @@ export async function liveView(el, { query }) {
       grid.replaceChildren(emptyState({ iconName: state.group === '__favorites' ? 'star' : 'search', title: state.group === '__favorites' ? 'Noch keine Favoriten' : 'Keine Sender gefunden', text: state.group === '__favorites' ? 'OK gedrückt halten bzw. lange auf einen Sender tippen → „Zu Favoriten hinzufügen“.' : null }));
       return;
     }
-    batch = batchedList(grid, list, (ch, i) =>
-      channelCard(ch, {
+    batch = batchedList(grid, list, (ch, i) => {
+      const card = channelCard(ch, {
         list: state.view === 'list',
         favorite: favs.has(iptv.channelKey(source.id, ch)),
-        onClick: () => playChannel(source.id, list, i),
+        onClick: () => {
+          // Touch/mouse with preview: first tap = preview, second tap (or the picture) = full screen.
+          // Remote: the focus already previews, OK = full screen.
+          if (preview && !inputMode.isTV() && !preview.isShowing(i)) {
+            for (const c of grid.querySelectorAll('.card.channel.previewing')) c.classList.remove('previewing');
+            card.classList.add('previewing');
+            preview.show(ch, i, { immediate: true });
+            return;
+          }
+          playChannel(source.id, list, i);
+        },
         onLongPress: () => channelContextMenu(source.id, ch, async () => {
           favs = new Set(await iptv.favoriteKeys());
           preserveFocus(grid, renderList);
         }),
-      }),
-    );
+      });
+      card.dataset.index = String(i);
+      if (preview && preview.isShowing(i) && preview.channel === ch) card.classList.add('previewing');
+      return card;
+    });
   };
 
   const load = async () => {
@@ -312,6 +338,7 @@ export async function liveView(el, { query }) {
     unmount() {
       offs.forEach((o) => o());
       if (batch) batch.destroy();
+      if (preview) preview.destroy();
     },
   };
 }

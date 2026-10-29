@@ -12,7 +12,6 @@ import { homeView } from './views/home.js';
 import { liveView } from './views/live.js';
 import { libraryView, libraryDetailView, libraryBrowseView } from './views/library.js';
 import { lampaView } from './views/lampa.js';
-import { youtubeView, youtubeSearchView, youtubeWatchView, youtubeChannelView } from './views/youtube.js';
 import { settingsView } from './views/settings.js';
 
 const NAV = [
@@ -20,7 +19,6 @@ const NAV = [
   { path: '/live', label: 'Live-TV', icon: 'tv', module: 'live' },
   { path: '/library', label: 'Videothek', icon: 'film', module: 'library' },
   { path: '/lampa', label: 'Lampa', icon: 'lamp', module: 'lampa' },
-  { path: '/youtube', label: 'YouTube', icon: 'youtube', module: 'youtube' },
   { path: '/settings', label: 'Einstellungen', icon: 'settings' },
 ];
 
@@ -108,10 +106,6 @@ export function mountApp(root) {
   defineRoute('/library/view/:id', libraryBrowseView);
   defineRoute('/library/item/:id', libraryDetailView);
   defineRoute('/lampa', lampaView);
-  defineRoute('/youtube', youtubeView);
-  defineRoute('/youtube/search', youtubeSearchView);
-  defineRoute('/youtube/watch/:id', youtubeWatchView);
-  defineRoute('/youtube/channel/:id', youtubeChannelView);
   defineRoute('/settings/:section?', settingsView);
 
   // Before router.start: the first route event must already set the class (direct start on #/lampa).

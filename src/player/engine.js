@@ -23,6 +23,7 @@ export function detectType(url) {
   const u = String(url || '').toLowerCase().split(/[?#]/)[0];
   if (/\.m3u8$|\.m3u$/.test(u) || /\/(hls|manifest)(\.|\/)|\/playlist\.m3u|format=m3u8|type=m3u8/.test(String(url).toLowerCase())) return 'hls';
   if (/\.(ts|mts|m2ts)$/.test(u)) return 'mpegts';
+  if (/\.mpd$/.test(u)) return 'dash';
   if (/\.(mp4|m4v|mov|webm|mkv|ogv|mp3|aac|m4a|ogg|oga|flac|wav|opus)$/.test(u)) return 'file';
   return 'unknown';
 }

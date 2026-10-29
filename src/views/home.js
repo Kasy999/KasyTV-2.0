@@ -22,7 +22,7 @@ function greeting() {
 export async function homeView(el) {
   const rows = h('div.rows');
   const name = store.get('jellyfin.userName');
-  el.append(h('header.view-head.hero', h('div', h('h1', greeting() + (name ? ', ' + name : '')), h('p.muted', 'Live-TV, Videothek, Lampa und YouTube an einem Ort.'))), rows);
+  el.append(h('header.view-head.hero', h('div', h('h1', greeting() + (name ? ', ' + name : '')), h('p.muted', 'Live-TV, Videothek und Lampa an einem Ort.'))), rows);
 
   let alive = true;
   const render = async () => {
@@ -124,7 +124,6 @@ export async function homeView(el) {
     if (cfg.modules.live && !sources.length) hints.push(actionCard({ iconName: 'upload', title: 'IPTV-Playlist laden', text: 'M3U-Datei hochladen oder Adresse eingeben', onClick: () => navigate('/settings/iptv') }));
     if (cfg.modules.library && !jf.isConnected()) hints.push(actionCard({ iconName: 'film', title: 'Jellyfin verbinden', text: 'Filme und Serien vom eigenen Server', onClick: () => navigate('/settings/jellyfin') }));
     if (cfg.modules.lampa) hints.push(actionCard({ iconName: 'lamp', title: 'Lampa öffnen', text: 'Filme & Serien entdecken', onClick: () => navigate('/lampa') }));
-    if (cfg.modules.youtube) hints.push(actionCard({ iconName: 'youtube', title: 'YouTube', text: 'Mit SponsorBlock', onClick: () => navigate('/youtube') }));
     hints.push(actionCard({ iconName: 'save', title: 'Einstellungen sichern', text: 'Backup als JSON-Datei', onClick: () => navigate('/settings/backup') }));
     parts.push(row(sources.length || jf.isConnected() ? 'Schnellzugriff' : 'Los geht’s', hints));
 

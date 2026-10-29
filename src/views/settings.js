@@ -15,7 +15,6 @@ import { SB_CATEGORIES } from '../services/sponsorblock.js';
 import { DEFAULT_HOSTS, blockedTotal } from '../services/adblock.js';
 import * as iptv from '../services/iptv.js';
 import * as jf from '../services/jellyfin.js';
-import * as yt from '../services/youtube.js';
 import { exportBackup, importBackup, daysSinceBackup } from '../services/backup.js';
 import { jellyfinLoginForm } from './library.js';
 import { uploadPlaylistFlow, addUrlFlow, pickPlaylistFile } from './live.js';
@@ -30,7 +29,6 @@ const SECTIONS = [
   { id: 'blocker', label: 'Werbeblocker & SponsorBlock', icon: 'shield' },
   { id: 'text', label: 'Zeichen & Untertitel', icon: 'text' },
   { id: 'lampa', label: 'Lampa', icon: 'lamp' },
-  { id: 'youtube', label: 'YouTube', icon: 'youtube' },
   { id: 'backup', label: 'Speicher & Backup', icon: 'save' },
   { id: 'about', label: 'Über', icon: 'info' },
 ];
@@ -116,7 +114,6 @@ const BUILDERS = {
         toggleRow('Live-TV', null, 'ui.modules.live'),
         toggleRow('Videothek (Jellyfin)', null, 'ui.modules.library'),
         toggleRow('Lampa', null, 'ui.modules.lampa'),
-        toggleRow('YouTube', null, 'ui.modules.youtube'),
       ),
       section(
         'Startseite',
@@ -191,6 +188,11 @@ const BUILDERS = {
           button('Adresse hinzufügen', () => addUrlFlow(), { icon: 'link' }),
         ),
         h('p.hint', 'iPhone/iPad: „Datei hochladen“ öffnet die Dateien-App (iCloud Drive, Downloads, „Auf meinem iPhone“). Ist die Datei ausgegraut, „Alle Dateitypen“ verwenden.'),
+      ),
+      section(
+        'Ansicht',
+        toggleRow('Vorschau des markierten Senders', 'Fernbedienung: der markierte Sender läuft nach kurzer Pause in der Vorschau. Touch: erster Tipp = Vorschau, zweiter Tipp = Vollbild.', 'iptv.preview'),
+        toggleRow('Ton in der Vorschau', null, 'iptv.previewSound'),
       ),
       section(
         'Netzwerk',
@@ -383,60 +385,6 @@ const BUILDERS = {
         ]),
         textRow('Adresse', 'Lampa- oder Wampa-Instanz. Standard: offizieller HTTPS-Build (yumata.github.io/lampa)', 'lampa.url', { placeholder: 'https://yumata.github.io/lampa/' }),
         h('p.hint', 'Lampa läuft direkt in der App (kein neuer Tab). HTTP-Adressen sind in der HTTPS-App gesperrt – dann wird automatisch der offizielle HTTPS-Build verwendet.'),
-      ),
-    ];
-  },
-
-  async youtube(render) {
-    const status = h('p.form-status');
-    const cur = yt.currentInstance();
-    return [
-      section(
-        'Werbefreie Wiedergabe',
-        h('p.set-desc', 'YouTube läuft über eine Invidious-Instanz (Open-Source-Frontend): keine YouTube-Werbung, kein Google-Konto, Videos im Kasy-Player mit SponsorBlock und Untertitel-Stilen. Abos, „Später ansehen“ und Verlauf bleiben auf diesem Gerät.'),
-        selectRow('Server', null, 'youtube.backend', [
-          { value: 'auto', label: 'Automatisch', description: 'Öffentliche Instanzen, Wechsel bei Ausfall' },
-          { value: 'custom', label: 'Eigene Instanz', description: 'Am zuverlässigsten (selbst gehostet)' },
-        ], { onChange: () => (yt.resetInstances(), render()) }),
-        textRow('Eigene Instanz', 'z. B. https://invidious.meine-domain.de – wird bei „Automatisch“ zuerst versucht', 'youtube.instance', { placeholder: 'https://…', type: 'url', onChange: () => (yt.resetInstances(), render()) }),
-        infoRow('Aktuell verbunden', cur || 'noch keine Anfrage'),
-        actionRow('Verbindung testen', null, 'Testen', async () => {
-          status.textContent = 'Teste …';
-          status.className = 'form-status';
-          try {
-            yt.resetInstances();
-            const n = (await yt.trending()).length;
-            status.textContent = `OK – ${n} Videos von ${yt.currentInstance()}`;
-            status.classList.add('ok');
-          } catch (e) {
-            status.textContent = e.message;
-            status.classList.add('error');
-          }
-        }, { iconName: 'refresh' }),
-        status,
-      ),
-      section(
-        'Wiedergabe',
-        toggleRow('Hohe Qualität (DASH)', 'HD bis 4K mit dash.js auf Android TV, Xiaomi-Stick, Desktop; sonst MP4 bis 720p/360p.', 'youtube.highQuality'),
-        toggleRow('Nächstes Video automatisch', 'Nach dem Ende startet ein ähnliches Video (10 s Countdown)', 'youtube.autoplayNext'),
-        toggleRow('Ersatz: offizieller Player', 'Wenn kein werbefreier Stream verfügbar ist, im offiziellen YouTube-Player abspielen (SponsorBlock bleibt aktiv).', 'youtube.fallbackEmbed'),
-        toggleRow('Datenschutzmodus im offiziellen Player', 'youtube-nocookie.com', 'youtube.noCookie'),
-      ),
-      section(
-        'Inhalte',
-        toggleRow('Shorts ausblenden', null, 'youtube.hideShorts'),
-        selectRow('Region für Trends', null, 'youtube.region', [
-          { value: 'DE', label: 'Deutschland' },
-          { value: 'AT', label: 'Österreich' },
-          { value: 'CH', label: 'Schweiz' },
-          { value: 'US', label: 'USA' },
-          { value: 'GB', label: 'Großbritannien' },
-          { value: 'RU', label: 'Russland' },
-          { value: 'UA', label: 'Ukraine' },
-          { value: 'FR', label: 'Frankreich' },
-          { value: 'ES', label: 'Spanien' },
-        ]),
-        actionRow('SponsorBlock-Kategorien', 'Sponsoren, Intros, Eigenwerbung …', 'Öffnen', () => navigate('/settings/blocker'), { iconName: 'shield' }),
       ),
     ];
   },
