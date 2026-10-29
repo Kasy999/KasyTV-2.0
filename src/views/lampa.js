@@ -16,7 +16,6 @@ import { inputMode } from '../core/input-mode.js';
 import { navigate } from '../core/router.js';
 import { isMixedContent } from '../core/util.js';
 import { toast } from '../components/toast.js';
-import { emptyState } from '../components/cards.js';
 import { guardWindow } from '../services/adblock.js';
 import { youtubeId } from '../services/sponsorblock.js';
 import { playYouTube } from '../player/player.js';
@@ -26,12 +25,24 @@ let frame = null;
 let loadedUrl = null;
 let mode = null; // 'hooked' | 'plain'
 
+const MIRROR = 'https://yumata.github.io/lampa/';
+let mirrorNotice = false;
+
 function lampaUrl() {
   if (store.get('lampa.source') === 'local') return new URL('./lampa/', location.href).href;
   let u = (store.get('lampa.url') || '').trim();
-  if (!u) return '';
-  if (!/^https?:\/\//i.test(u)) u = 'http://' + u;
-  return u.endsWith('/') || /\.html?$/i.test(u) ? u : u + '/';
+  if (!u) return MIRROR;
+  if (!/^https?:\/\//i.test(u)) u = (location.protocol === 'https:' ? 'https://' : 'http://') + u;
+  u = u.endsWith('/') || /\.html?$/i.test(u) ? u : u + '/';
+  // An HTTPS app can't embed an HTTP page – use the official HTTPS build instead of opening a new tab.
+  if (isMixedContent(u)) {
+    if (!mirrorNotice) {
+      mirrorNotice = true;
+      toast('HTTP-Adresse von Lampa ist in der HTTPS-App gesperrt – nutze den offiziellen HTTPS-Build', { duration: 4500 });
+    }
+    return MIRROR;
+  }
+  return u;
 }
 
 function exitToNav() {
@@ -165,26 +176,9 @@ export async function lampaView(el) {
     h('span.spacer'),
     h('button.icon-btn.small', { type: 'button', data: { focus: true }, title: 'Lampa bedienen', 'aria-label': 'In Lampa wechseln', onClick: () => enterFrame() }, icon('down')),
     h('button.icon-btn.small', { type: 'button', data: { focus: true }, title: 'Neu laden', 'aria-label': 'Neu laden', onClick: () => reload() }, icon('refresh')),
-    h('button.icon-btn.small', { type: 'button', data: { focus: true }, title: 'In neuem Tab öffnen', 'aria-label': 'In neuem Tab öffnen', onClick: () => window.open(url, '_blank', 'noopener') }, icon('external')),
     h('button.icon-btn.small', { type: 'button', data: { focus: true }, title: 'Lampa-Einstellungen', 'aria-label': 'Einstellungen', onClick: () => navigate('/settings/lampa') }, icon('settings')),
   );
   el.append(toolbar);
-
-  if (!url) {
-    el.append(emptyState({ iconName: 'lamp', title: 'Keine Lampa-Adresse', text: 'Unter Einstellungen → Lampa die Adresse eintragen (z. B. lampa.mx oder ein eigener Lampa/Wampa-Server).' }));
-    return null;
-  }
-  if (isMixedContent(url)) {
-    el.append(
-      emptyState({
-        iconName: 'info',
-        title: 'Lampa über HTTP',
-        text: 'Diese App läuft über HTTPS – der Browser lädt die HTTP-Adresse von Lampa nicht im Rahmen. Eine HTTPS-Adresse eintragen, Lampa lokal mitliefern (Quelle „Lokal“) oder in einem neuen Tab öffnen.',
-        actions: [h('button.btn.primary', { type: 'button', data: { focus: true }, onClick: () => window.open(url, '_blank', 'noopener') }, icon('external'), h('span.btn-label', 'In neuem Tab öffnen'))],
-      }),
-    );
-    return null;
-  }
 
   if (!host) {
     host = h('div.lampa-host');

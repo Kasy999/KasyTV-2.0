@@ -381,8 +381,8 @@ const BUILDERS = {
           { value: 'remote', label: 'Server (Adresse)', description: 'z. B. lampa.mx oder eigener Lampa/Wampa-Server' },
           { value: 'local', label: 'Lokal mitgeliefert', description: 'Lampa-Build in public/lampa/ (gleiche Herkunft, voll integriert)' },
         ]),
-        textRow('Adresse', 'Lampa- oder Wampa-Instanz', 'lampa.url', { placeholder: 'http://lampa.mx' }),
-        h('p.hint', 'Läuft die App über HTTPS, muss auch Lampa über HTTPS erreichbar sein – oder Lampa lokal mitliefern (siehe README).'),
+        textRow('Adresse', 'Lampa- oder Wampa-Instanz. Standard: offizieller HTTPS-Build (yumata.github.io/lampa)', 'lampa.url', { placeholder: 'https://yumata.github.io/lampa/' }),
+        h('p.hint', 'Lampa läuft direkt in der App (kein neuer Tab). HTTP-Adressen sind in der HTTPS-App gesperrt – dann wird automatisch der offizielle HTTPS-Build verwendet.'),
       ),
     ];
   },

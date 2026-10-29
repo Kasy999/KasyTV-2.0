@@ -43,7 +43,7 @@ export const DEFAULTS = {
     preferDirectPlay: true,
   },
   lampa: {
-    url: 'http://lampa.mx',
+    url: 'https://yumata.github.io/lampa/', // official Lampa build (GitHub Pages, HTTPS)
     source: 'remote', // remote | local
   },
   youtube: {
@@ -161,6 +161,8 @@ export const store = {
     }
     state = deepMerge(DEFAULTS, saved || {});
     if (!state.jellyfin.deviceId) state.jellyfin.deviceId = uid('kasy-');
+    // Old default (HTTP) can't be framed by the HTTPS app – move to the HTTPS build.
+    if (/^(https?:\/\/)?lampa\.mx\/?$/i.test(state.lampa.url || '')) state.lampa.url = DEFAULTS.lampa.url;
     persist();
     return state;
   },
