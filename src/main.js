@@ -11,11 +11,16 @@ import { daysSinceBackup, exportBackup } from './services/backup.js';
 import { mountApp, showBanner } from './app.js';
 import { toast } from './components/toast.js';
 
-// Older TV browsers (Chromium < 86) lack replaceChildren.
-if (!Element.prototype.replaceChildren) {
+// replaceChildren for older TV browsers (Chromium < 86), and everywhere: skip null/false entries instead of
+// rendering them as the text "null" (conditional UI parts like `cond ? button : null`).
+{
+  const nativeReplace = Element.prototype.replaceChildren;
   Element.prototype.replaceChildren = function (...nodes) {
+    const list = nodes.filter((n) => n !== null && n !== undefined && n !== false);
+    if (nativeReplace) return nativeReplace.apply(this, list);
     while (this.firstChild) this.removeChild(this.firstChild);
-    for (const n of nodes) this.append(n);
+    for (const n of list) this.append(n);
+    return undefined;
   };
 }
 

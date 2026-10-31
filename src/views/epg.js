@@ -132,10 +132,12 @@ export async function epgView(el, { query }) {
     const nn = data ? epg.nowNext(data, current) : { now: null };
     chBtn.replaceChildren(icon('tv'), h('span', current.name), icon('down'));
     head.replaceChildren(
+      ...[
       img(current.logo, current.name, 'epg-logo', current.name),
       h('div.epg-chhead-text', h('h2', current.name), h('div.muted', [current.group, hasArchive(current) ? `Archiv: ${current.catchup.days} Tage` : 'kein Archiv'].filter(Boolean).join(' · '))),
       button('Live', () => playChannel(source.id, channels, channels.indexOf(current)), { variant: 'primary', icon: 'play' }),
       nn.now && hasArchive(current) ? button('Von Anfang', () => playArchive(current, nn.now), { icon: 'restart' }) : null,
+      ].filter(Boolean),
     );
   };
 
