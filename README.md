@@ -96,8 +96,9 @@ Intro-Skipper-Plugin.
 
 ### Lampa
 Lampa (oder ein Wampa-/eigener Lampa-Server) läuft als integriertes Modul: die Seite wird geladen und mit einem
-Hook in einen Rahmen gleicher Herkunft geschrieben und **im Vollbild** angezeigt (ohne Kasy-Leisten). Verlassen:
-Zurück zweimal schnell oder gedrückt halten, Lampas „Beenden?“-Frage oder (Touch) der kleine Knopf unten links. Erlaubt der Lampa-Server das Laden nicht (CORS),
+Hook in einen Rahmen gleicher Herkunft geschrieben und füllt den ganzen Inhaltsbereich; die Kasy-Navigation bleibt
+sichtbar (Seitenleiste bzw. Tab-Leiste), ohne Lampa zu überdecken. Zur Navigation (Fernbedienung):
+Zurück zweimal schnell oder gedrückt halten oder Lampas „Beenden?“-Frage. Erlaubt der Lampa-Server das Laden nicht (CORS),
 läuft Lampa als normales iframe. Zustand bleibt beim Tab-Wechsel erhalten.
 Lokal mitliefern: den Lampa-Build (github.com/yumata/lampa) nach `public/lampa/` kopieren und unter
 Einstellungen → Lampa die Quelle „Lokal“ wählen.

@@ -122,7 +122,7 @@ function serveFile(req, res, url) {
       const st = statSync(file);
       if (!st.isFile()) continue;
       const type = TYPES[extname(file).toLowerCase()] || 'application/octet-stream';
-      const headers = { 'Content-Type': type, 'Content-Length': st.size, 'Accept-Ranges': 'bytes' };
+      const headers = { 'Content-Type': type, 'Content-Length': st.size, 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': '*' };
       const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
       if (range) {
         const start = range[1] ? parseInt(range[1], 10) : Math.max(0, st.size - parseInt(range[2], 10));

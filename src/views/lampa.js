@@ -3,8 +3,10 @@
  *
  * The Lampa page is downloaded and written into a same-origin frame (srcdoc) with a <base> pointing to its server
  * and a hook in front of Lampa's own scripts – the same technique as the Smart-TV version (lampa-boot.js):
- *  - Lampa fills the whole screen (no Kasy navigation or toolbar),
- *  - Back pressed twice quickly / held, or Lampa's "exit?" question → leaves Lampa (previous Kasy view),
+ *  - Lampa fills the whole content area next to (TV) / above (phone) the Kasy navigation, without overlapping it,
+ *  - history.pushState/replaceState are patched: in the srcdoc frame Lampa's URLs (other origin) would throw a
+ *    SecurityError ("Script error"); the state is kept, only the URL is dropped,
+ *  - Back pressed twice quickly / held, or Lampa's "exit?" question → focus goes to the Kasy navigation,
  *  - trailers open in Kasy's player.
  * If the Lampa server doesn't allow the download (CORS), Lampa runs as a plain iframe without the hook.
  * The frame stays alive while switching tabs, so Lampa keeps its state.
@@ -12,7 +14,7 @@
 import { h, icon } from '../core/dom.js';
 import { store } from '../core/store.js';
 import { inputMode } from '../core/input-mode.js';
-import { back as routerBack } from '../core/router.js';
+import { focus } from '../core/focus.js';
 import { isMixedContent } from '../core/util.js';
 import { toast } from '../components/toast.js';
 import { youtubeId } from '../services/segments.js';
@@ -43,15 +45,35 @@ function lampaUrl() {
   return u;
 }
 
-/** Leaves the full-screen Lampa: back to the previous Kasy view (start view if Lampa was opened first). */
+/** Remote: leaves Lampa's controls – the focus goes to the Kasy navigation (Lampa keeps running). */
 function exitToNav() {
   if (frame) frame.blur();
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  routerBack();
+  const item = document.querySelector('.nav .nav-item.active') || document.querySelector('.nav .nav-item');
+  if (item) focus(item);
+}
+
+/** Lampa calls pushState with URLs of its own server – not allowed in a srcdoc frame. Keep state, drop URL. */
+function patchHistory(win) {
+  const hist = win.history;
+  ['pushState', 'replaceState'].forEach((name) => {
+    const original = hist[name];
+    hist[name] = function (state, title, url) {
+      try {
+        return original.call(this, state, title, url);
+      } catch {
+        try {
+          return original.call(this, state, title);
+        } catch {
+          return undefined;
+        }
+      }
+    };
+  });
 }
 
 /** Installed into Lampa's window before its scripts run. */
 window.__kasyLampaHook = function (win) {
+  patchHistory(win);
   let lastBack = 0;
   let held = false;
   const isBack = (e) => e.keyCode === 10009 || e.keyCode === 461 || e.key === 'GoBack' || e.key === 'BrowserBack';
@@ -168,9 +190,8 @@ export async function lampaView() {
   const url = lampaUrl();
   if (!host) {
     host = h('div.lampa-host');
-    // Small exit button for touch screens (no Back key on iPhone/iPad).
-    host.appendChild(h('button.lampa-exit', { type: 'button', 'aria-label': 'Lampa verlassen', title: 'Lampa verlassen', onClick: () => exitToNav() }, icon('back')));
-    document.body.appendChild(host);
+    // Inside the content area: sits next to / above the navigation and never covers it.
+    document.querySelector('.content').appendChild(host);
   }
   const enterFrame = () => {
     if (!frame) return;
@@ -185,15 +206,15 @@ export async function lampaView() {
     if (frame) frame.remove();
     frame = await buildFrame(url);
     loadedUrl = url;
-    host.insertBefore(frame, host.firstChild);
+    host.replaceChildren(frame);
   }
   host.classList.add('active');
   document.documentElement.classList.add('lampa-open');
-  // TV / desktop: real full screen of the device (no browser bars). Silently ignored where not allowed.
+  // TV / stick: real full screen of the device (no browser bars). Silently ignored where not allowed.
   if (inputMode.isTV() && document.documentElement.requestFullscreen && !document.fullscreenElement) {
     document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
   }
-  if (inputMode.isTV()) toast('Zurück zweimal schnell oder gedrückt halten → Lampa verlassen', { duration: 3500, iconName: 'remote' });
+  if (inputMode.isTV()) toast('Zurück zweimal schnell oder gedrückt halten → Navigation', { duration: 3500, iconName: 'remote' });
   setTimeout(enterFrame, 300);
   return {
     unmount() {
