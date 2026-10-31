@@ -1,10 +1,12 @@
-# Baut die PWA bei jedem Push auf main und veröffentlicht sie auf GitHub Pages (HTTPS → iPhone-Homescreen, offline).
+# Baut die PWA bei jedem Push auf main (und alle 6 h für den EPG-Spiegel) und veröffentlicht sie auf GitHub Pages.
 # Einmalig im Repository: Settings → Pages → Source: "GitHub Actions".
 name: Deploy PWA to GitHub Pages
 
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '17 */6 * * *' # EPG-Spiegel alle 6 Stunden aktualisieren
   workflow_dispatch:
 
 permissions:
@@ -27,6 +29,8 @@ jobs:
       - run: npm install
       - run: npm test
       - run: npm run build
+      - name: Mirror free EPG (XMLTV) into the site
+        run: node scripts/fetch-epg.mjs dist
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

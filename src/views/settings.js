@@ -78,7 +78,42 @@ function epgSection(render) {
   if (!src) return null;
   const status = h('p.form-status');
   const st = epg.epgStatus(src.id);
-  if (st) status.textContent = `${st.channels} Sender mit Programm · ${st.count} Sendungen · Stand ${formatDate(st.updatedAt)}`;
+  const describe = (d) =>
+    `${d.channels}${d.total ? ' von ' + d.total : ''} Sendern mit Programm · ${d.count} Sendungen · Stand ${formatDate(d.updatedAt)}` +
+    (d.sources && d.sources.length ? ` · Quelle: ${d.sources.map((u) => (u.includes('/epg/') ? 'Kasy-EPG' : new URL(u).hostname)).join(', ')}` : '') +
+    (d.primaryFailed ? ` · Playlist-EPG nicht ladbar (${d.primaryFailed})` : '');
+  if (st) status.textContent = describe(st);
+  const arch = src.archive || { type: 'auto', days: 7 };
+  const archType = h('button.select-btn', { type: 'button', data: { focus: true } });
+  const ARCH = [
+    { value: 'auto', label: 'Aus der Playlist', description: 'catchup-Angaben der M3U (Standard)' },
+    { value: 'SHIFT', label: 'Shift (?utc=…)', description: 'Viele Anbieter, z. B. Antifriz, Ottclub' },
+    { value: 'XTREAM', label: 'Xtream Codes', description: '/timeshift/user/pass/…' },
+    { value: 'FLUSSONIC', label: 'Flussonic', description: 'index-START-DAUER.m3u8' },
+    { value: 'APPEND', label: 'Anhängen (catchup-source)', description: 'Vorlage wird an die Stream-Adresse gehängt' },
+    { value: 'DEFAULT', label: 'Eigene Vorlage', description: 'Vollständige Adresse mit {utc} {utcend} …' },
+  ];
+  const syncArch = () => archType.replaceChildren(h('span.select-value', (ARCH.find((a) => a.value === arch.type) || ARCH[0]).label), icon('next'));
+  syncArch();
+  archType.addEventListener('click', async () => {
+    const v = await pickOption('Archiv-Typ', ARCH, arch.type);
+    if (!v) return;
+    let template = arch.source || '';
+    if (v === 'DEFAULT' || v === 'APPEND') {
+      const t = await promptDialog('Archiv-Vorlage', { value: template, placeholder: v === 'APPEND' ? '?utc={utc}&lutc={lutc}' : 'http://anbieter/…/archive-{utc}-{duration}.m3u8', hint: 'Platzhalter: {utc} {utcend} {lutc} {duration} {offset} {Y}{m}{d}{H}{M}{S}' });
+      if (t === null) return;
+      template = t.trim();
+    }
+    let days = arch.days || 7;
+    if (v !== 'auto') {
+      const d = await pickOption('Archiv-Tiefe', [1, 2, 3, 4, 5, 7, 10, 14].map((n) => ({ value: n, label: n + (n === 1 ? ' Tag' : ' Tage') })), days);
+      if (!d) return;
+      days = d;
+    }
+    iptv.setSourceArchive(src.id, { type: v, days, source: template || null });
+    await epg.clearEpg(src.id);
+    render();
+  });
   const urlBtn = h('button.select-btn.text', { type: 'button', data: { focus: true } }, h('span.select-value', src.epgUrl || 'aus der Playlist (url-tvg)'), icon('next'));
   urlBtn.addEventListener('click', async () => {
     const v = await promptDialog('EPG-Adresse', { value: src.epgUrl || '', placeholder: 'https://…/epg.xml.gz', type: 'url', hint: 'XMLTV, auch .gz. Leer lassen = Adresse aus der Playlist (url-tvg). Mehrere Adressen mit Leerzeichen trennen.' });
@@ -90,6 +125,11 @@ function epgSection(render) {
   return section(
     'TV-Programm (EPG) & Archiv – ' + src.name,
     h('div.set-row', h('div.set-text', h('div.set-label', 'EPG-Adresse'), h('div.set-desc', 'Programmdaten für Programmführer und Archiv')), h('div.set-control', urlBtn)),
+    selectRow('Freies Kasy-EPG', 'Wird genutzt, wenn die Playlist kein EPG hat oder der Anbieter den Abruf sperrt (CORS). Alle 6 Stunden aktualisiert.', 'iptv.epgMirror', [
+      ...epg.MIRRORS,
+      { value: 'off', label: 'Aus' },
+    ], { onChange: () => epg.clearEpg(src.id).then(render) }),
+    h('div.set-row', h('div.set-text', h('div.set-label', 'Archiv'), h('div.set-desc', arch.type === 'auto' ? 'Wie in der Playlist angegeben' : `Erzwungen: ${(ARCH.find((a) => a.value === arch.type) || {}).label}, ${arch.days} Tage – für Sender ohne eigene catchup-Angaben`)), h('div.set-control', archType)),
     stepperRow('Zeitverschiebung', 'Falls die Sendezeiten im EPG versetzt sind', 'iptv.epgShift', { min: -12, max: 12, step: 0.5, format: (v) => (v > 0 ? '+' : '') + v + ' h' }),
     actionRow('EPG jetzt laden', 'Wird sonst alle 12 Stunden automatisch aktualisiert', 'Laden', async () => {
       status.className = 'form-status';
@@ -97,7 +137,7 @@ function epgSection(render) {
       const off = bus.on('epg:progress', ({ bytes }) => (status.textContent = `Lädt … ${(bytes / 1048576).toFixed(1)} MB`));
       try {
         const d = await epg.refreshEpg(src.id);
-        status.textContent = `${d.channels} Sender mit Programm · ${d.count} Sendungen`;
+        status.textContent = describe(d);
         status.classList.add('ok');
       } catch (e) {
         status.textContent = e.message;

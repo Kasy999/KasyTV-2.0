@@ -22,8 +22,36 @@ const NON_ALNUM = /[^a-z0-9а-яё]/g;
 // Quality tags only as separate words ("ZDF HD" → zdf), never inside a name ("ZDF" must not lose its "f").
 const QUALITY = /(^|[^a-z0-9а-яё])(uhd|fhd|hd|sd|4k|hevc|h265|h264|50fps|orig|\+1)(?=$|[^a-z0-9а-яё])/g;
 
+/**
+ * Comparable form of a channel name or XMLTV id: "Das Erste HD" / "DasErste.de" / "3sat.de@SD" / "3sat (720p)"
+ * → "daserste" / "3sat". Drops iptv-org feed suffixes (@SD), bracketed notes, a 2-letter country ending and
+ * quality tags.
+ */
 export function normalizeName(name) {
-  return String(name || '').toLowerCase().replace(QUALITY, '$1').replace(QUALITY, '$1').replace(NON_ALNUM, '');
+  return String(name || '')
+    .toLowerCase()
+    .replace(/@[^@]*$/, '')
+    .replace(/\s*[([][^)\]]*[)\]]/g, ' ')
+    .trim()
+    .replace(/\.[a-z]{2}$/, '')
+    .replace(QUALITY, '$1')
+    .replace(QUALITY, '$1')
+    .replace(NON_ALNUM, '');
+}
+
+/** XMLTV id without the iptv-org feed suffix ("3sat.de@SD" → "3sat.de"), lower case. */
+function baseId(id) {
+  return String(id || '').toLowerCase().replace(/@[^@]*$/, '').trim();
+}
+
+/** Free EPG mirrored by the GitHub workflow next to the app (./epg/<id>.xml.gz, same origin → no CORS). */
+export const MIRRORS = [
+  { value: 'de', label: 'Deutschland' },
+  { value: 'at', label: 'Österreich' },
+  { value: 'ch', label: 'Schweiz' },
+];
+export function mirrorUrl(id) {
+  return new URL(`./epg/${id}.xml.gz`, location.href).href;
 }
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
@@ -162,6 +190,7 @@ async function openStream(url) {
     res = await fetch(p, { cache: 'no-store' });
   }
   if (!res.ok) throw new Error('EPG: HTTP ' + res.status);
+  if (!res.body || !res.body.getReader) throw new Error('Browser kann das EPG nicht stückweise lesen');
   return res;
 }
 
@@ -230,6 +259,11 @@ function sourceEpgUrls(source, playlist) {
   return own.length ? own : (playlist.epgUrls || []).slice(0, 3);
 }
 
+function mirrorUrls() {
+  const m = store.get('iptv.epgMirror');
+  return m && m !== 'off' ? [mirrorUrl(m)] : [];
+}
+
 /** Downloads the EPG of a playlist source and stores it. */
 export async function refreshEpg(sourceId) {
   if (loading.has(sourceId)) return loading.get(sourceId);
@@ -237,15 +271,23 @@ export async function refreshEpg(sourceId) {
     const source = getSources().find((s) => s.id === sourceId);
     const playlist = await getPlaylist(sourceId);
     if (!source || !playlist) throw new Error('Keine Senderliste');
-    const urls = sourceEpgUrls(source, playlist);
-    if (!urls.length) throw new Error('Die Playlist enthält keine EPG-Adresse (url-tvg). Unter Einstellungen → IPTV eine EPG-Adresse eintragen.');
+    const primary = sourceEpgUrls(source, playlist);
+    const mirrors = mirrorUrls();
+    if (!primary.length && !mirrors.length) throw new Error('Die Playlist enthält keine EPG-Adresse (url-tvg). Unter Einstellungen → IPTV-Quellen eine EPG-Adresse oder das freie Kasy-EPG wählen.');
 
     // Matching tables: tvg-id → channels, normalised names → channels
     const byId = new Map();
+    const byBaseId = new Map();
     const byName = new Map();
     let maxDays = 0;
+    const add = (map, k, v) => (map.get(k) || map.set(k, []).get(k)).push(v);
     for (const ch of playlist.channels) {
-      if (ch.tvgId) (byId.get(ch.tvgId) || byId.set(ch.tvgId, []).get(ch.tvgId)).push(ch.id);
+      if (ch.tvgId) {
+        add(byId, ch.tvgId, ch.id);
+        add(byBaseId, baseId(ch.tvgId), ch.id);
+        const k = normalizeName(ch.tvgId);
+        if (k) add(byName, k, ch.id);
+      }
       for (const n of [ch.tvgName, ch.name]) {
         const k = normalizeName(n);
         if (k) (byName.get(k) || byName.set(k, []).get(k)).push(ch.id);
@@ -257,7 +299,7 @@ export async function refreshEpg(sourceId) {
       fromMs: now - Math.min(Math.max(maxDays, 1), 14) * DAY - DAY / 2,
       toMs: now + 2 * DAY,
       acceptChannel(id, names) {
-        const out = new Set(byId.get(id) || []);
+        const out = new Set(byId.get(id) || byBaseId.get(baseId(id)) || []);
         if (!out.size) {
           const k = normalizeName(id);
           for (const x of byName.get(k) || []) out.add(x);
@@ -269,19 +311,36 @@ export async function refreshEpg(sourceId) {
 
     const parser = new XmltvParser(filter);
     let lastError = null;
-    let okCount = 0;
-    for (const url of urls) {
-      try {
-        const res = await openStream(url);
-        await readText(res, (t) => parser.feed(t), (bytes) => bus.emit('epg:progress', { sourceId, bytes, url }));
-        okCount++;
-      } catch (e) {
-        lastError = e;
+    const used = [];
+    const tryUrls = async (urls) => {
+      for (const url of urls) {
+        try {
+          const res = await openStream(url);
+          await readText(res, (t) => parser.feed(t), (bytes) => bus.emit('epg:progress', { sourceId, bytes, url }));
+          used.push(url);
+        } catch (e) {
+          lastError = e;
+          console.warn('[epg]', url, e.message);
+        }
       }
+    };
+    await tryUrls(primary);
+    // Provider EPG missing or blocked (CORS) → free mirrored EPG; also when it matched almost no channel.
+    let primaryFailed = primary.length > 0 && !used.length;
+    if (mirrors.length && (!used.length || Object.keys(parser.programs).length < Math.min(5, playlist.channels.length))) {
+      await tryUrls(mirrors.filter((m) => !used.includes(m)));
     }
-    if (!okCount) throw lastError || new Error('EPG nicht ladbar');
+    if (!used.length) throw lastError || new Error('EPG nicht ladbar');
     const { programs, count } = parser.finish();
-    const data = { programs, count, channels: Object.keys(programs).length, updatedAt: Date.now() };
+    const data = {
+      programs,
+      count,
+      channels: Object.keys(programs).length,
+      total: playlist.channels.length,
+      sources: used,
+      primaryFailed: primaryFailed ? (lastError && lastError.message) || 'nicht ladbar' : null,
+      updatedAt: Date.now(),
+    };
     await db.set(KEY(sourceId), data);
     memo.set(sourceId, data);
     bus.emit('epg:changed', { sourceId });
@@ -302,12 +361,13 @@ export async function getEpg(sourceId, { autoRefresh = true } = {}) {
     data = (await db.get(KEY(sourceId))) || null;
     if (data) memo.set(sourceId, data);
   }
-  if (autoRefresh && (!data || Date.now() - data.updatedAt > 12 * 3600e3) && navigator.onLine) {
+  const stale = !data || !data.channels || Date.now() - data.updatedAt > 12 * 3600e3;
+  if (autoRefresh && stale && navigator.onLine) {
     const p = refreshEpg(sourceId).catch((e) => {
       bus.emit('epg:error', { sourceId, message: e.message });
       return null;
     });
-    if (!data) data = await p;
+    if (!data || !data.channels) data = (await p) || data;
   }
   return data;
 }

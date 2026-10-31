@@ -63,3 +63,11 @@ test('archive URLs (catch-up types)', () => {
   assert.ok(!isAvailable(shift, start - 8 * 86400000, now));
   assert.equal(buildArchiveUrl({ url: 'x', catchup: { type: 'NONE', days: 0 } }, start, end, now), null);
 });
+
+test('name/id normalisation for iptv-org and open-epg ids', () => {
+  assert.equal(normalizeName('3sat.de@SD'), normalizeName('3sat'));
+  assert.equal(normalizeName('3sat (720p)'), '3sat');
+  assert.equal(normalizeName('13TH STREET.de'), normalizeName('13th Street HD'));
+  assert.equal(normalizeName('Das Erste HD [Geo-blocked]'), 'daserste');
+  assert.equal(normalizeName('ZDF'), 'zdf');
+});

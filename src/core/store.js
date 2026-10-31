@@ -27,6 +27,7 @@ export const DEFAULTS = {
     view: 'grid', // grid | list
     preview: true, // live preview of the highlighted channel
     previewSound: false,
+    epgMirror: 'de', // free EPG mirrored next to the app (de | at | ch | off) – used when the playlist has none or it is blocked
     epgShift: 0, // hours, added to every programme (on top of tvg-shift)
     sort: 'default', // default | name | number
     lastGroup: '__all',

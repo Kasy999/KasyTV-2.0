@@ -172,8 +172,7 @@ export function renameSource(id, name) {
 }
 
 /** The parsed playlist of a source (memory → IndexedDB → network). */
-export async function getPlaylist(id) {
-  if (!id) return null;
+async function loadRawPlaylist(id) {
   if (memo.has(id)) return memo.get(id);
   const pl = await db.playlistGet(id);
   if (pl) {
@@ -183,6 +182,39 @@ export async function getPlaylist(id) {
   const source = sources().find((s) => s.id === id);
   if (source && source.type === 'url') return refreshSource(id);
   return null;
+}
+
+const archived = new Map(); // id -> { sig, raw, pl }
+
+/**
+ * Archive setting of a source: many providers support catch-up although the playlist doesn't say so
+ * (no catchup attributes). source.archive = { type: 'auto' | SHIFT | FLUSSONIC | XTREAM | DEFAULT, days, source }
+ * forces it for every channel without own catch-up data.
+ */
+function applyArchive(source, pl) {
+  const a = source && source.archive;
+  if (!pl || !a || !a.type || a.type === 'auto') return pl;
+  const sig = JSON.stringify(a);
+  const hit = archived.get(pl.id);
+  if (hit && hit.sig === sig && hit.raw === pl) return hit.pl;
+  const days = Math.max(1, parseInt(a.days, 10) || 7);
+  const channels = pl.channels.map((ch) =>
+    ch.catchup && ch.catchup.type !== 'NONE' && ch.catchup.days > 0 ? ch : { ...ch, catchup: { type: a.type, source: a.source || null, days } },
+  );
+  const out = { ...pl, channels };
+  archived.set(pl.id, { sig, raw: pl, pl: out });
+  return out;
+}
+
+export async function getPlaylist(id) {
+  if (!id) return null;
+  const pl = await loadRawPlaylist(id);
+  return applyArchive(sources().find((s) => s.id === id), pl);
+}
+
+export function setSourceArchive(id, archive) {
+  store.set('iptv.sources', sources().map((s) => (s.id === id ? { ...s, archive } : s)));
+  bus.emit('iptv:changed', { sourceId: id });
 }
 
 /** Refreshes URL sources older than the configured interval (in the background). */
