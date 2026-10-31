@@ -1,10 +1,12 @@
 /**
  * Lampa as web module.
  *
- * The Lampa page is downloaded and written into a same-origin frame (srcdoc) with a <base> pointing to its server
+ * The Lampa page is downloaded and loaded into a same-origin frame (blob: URL) with a <base> pointing to its server
  * and a hook in front of Lampa's own scripts – the same technique as the Smart-TV version (lampa-boot.js):
  *  - Lampa fills the whole content area next to (TV) / above (phone) the Kasy navigation, without overlapping it,
- *  - history.pushState/replaceState are patched: in the srcdoc frame Lampa's URLs (other origin) would throw a
+ *  - a blob: URL, not srcdoc: Lampa's index.html has no doctype and relies on quirks mode (it sets sizes like
+ *    style.width = 449 without "px"); srcdoc documents are always in standards mode, so all areas stayed 0 px wide,
+ *  - history.pushState/replaceState are patched: in the blob frame Lampa's URLs (other origin) would throw a
  *    SecurityError ("Script error"); the state is kept, only the URL is dropped,
  *  - Back pressed twice quickly / held, or Lampa's "exit?" question → focus goes to the Kasy navigation,
  *  - trailers open in Kasy's player.
@@ -24,6 +26,7 @@ let host = null;
 let frame = null;
 let loadedUrl = null;
 let mode = null; // 'hooked' | 'plain'
+let blobUrl = null;
 
 const MIRROR = 'https://yumata.github.io/lampa/';
 let mirrorNotice = false;
@@ -52,7 +55,7 @@ function exitToNav() {
   if (item) focus(item);
 }
 
-/** Lampa calls pushState with URLs of its own server – not allowed in a srcdoc frame. Keep state, drop URL. */
+/** Lampa calls pushState with URLs of its own server – not allowed in the blob frame. Keep state, drop URL. */
 function patchHistory(win) {
   const hist = win.history;
   ['pushState', 'replaceState'].forEach((name) => {
@@ -177,7 +180,9 @@ async function buildFrame(url) {
     const base = new URL('.', res.url || url).href;
     const inject = `<base href="${base}"><script>try{parent.__kasyLampaHook(window)}catch(e){}</script>`;
     html = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => m + inject) : inject + html;
-    f.srcdoc = html;
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
+    blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    f.src = blobUrl;
     mode = 'hooked';
   } catch (e) {
     console.info('[lampa] ohne Hook (', e.message, ') – normales iframe');
