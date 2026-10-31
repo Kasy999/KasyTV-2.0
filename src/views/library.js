@@ -10,7 +10,7 @@ import { row, posterCard, emptyState, loading } from '../components/cards.js';
 import { pickOption } from '../components/dialog.js';
 import { toast } from '../components/toast.js';
 import * as jf from '../services/jellyfin.js';
-import { youtubeId } from '../services/sponsorblock.js';
+import { youtubeId } from '../services/segments.js';
 import { playJellyfin, playYouTube } from '../player/player.js';
 
 function itemSubtitle(it) {

@@ -419,7 +419,7 @@ export function reportStopped(it, pb, pos) {
 
 /** Intro / credits segments: Jellyfin 10.10 MediaSegments API, then the Intro Skipper plugin endpoints. */
 export async function mediaSegments(it) {
-  const actions = store.get('blocker.mediaSegments') || {};
+  const actions = store.get('player.skipSegments') || {};
   const toSeg = (type, start, end) => ({
     start,
     end,

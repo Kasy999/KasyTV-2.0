@@ -19,7 +19,7 @@ import { YouTubeMedia } from './youtube-engine.js';
 import { pickOption, dialog } from '../components/dialog.js';
 import { stepperRow, selectRow, colorRow } from '../components/controls.js';
 import { toast } from '../components/toast.js';
-import { SegmentSkipper, fetchSponsorSegments, youtubeId } from '../services/sponsorblock.js';
+import { SegmentSkipper, youtubeId } from '../services/segments.js';
 import * as iptv from '../services/iptv.js';
 import * as epg from '../services/epg.js';
 import { navigate } from '../core/router.js';
@@ -41,8 +41,6 @@ class Player {
     this.video.setAttribute('x-webkit-airplay', 'allow');
     this.video.preload = 'auto';
     this.engine = new VideoEngine(this.video, {
-      onAdBreak: (on) => this.onAdBreak(on),
-      onAdsRemoved: (r) => toast(`Werbeblocker: ${r.removed} Werbesegmente entfernt (${formatTime(r.seconds)})`, { kind: 'success', iconName: 'shield' }),
       onLevels: () => {},
       onTracks: () => {},
       onFatal: (e) => this.showError(e.message),
@@ -59,10 +57,6 @@ class Player {
     this.spinner = h('div.player-spinner', h('div.spinner'));
     this.zap = h('div.player-zap');
     this.seekHint = h('div.seek-hint');
-    this.adCover = h(
-      'div.player-adcover',
-      h('div.adcover-box', icon('shield'), h('div', h('strong', 'Werbepause erkannt'), h('div.muted', 'Ton stummgeschaltet – geht nach der Pause automatisch weiter.'))),
-    );
     this.skipBtn = h('button.player-skip', { type: 'button', data: { focus: true }, onClick: () => this.skipper && this.skipper.skip() });
     this.errorBox = h('div.player-error');
     this.nextCard = h('div.player-next');
@@ -140,7 +134,6 @@ class Player {
       h('div.player-stage', this.video, this.ytHost),
       this.subLayer,
       this.gesture,
-      this.adCover,
       this.spinner,
       this.zap,
       this.seekHint,
@@ -227,7 +220,6 @@ class Player {
     this.closePanel(true);
     this.releaseWakeLock();
     this.exitFullscreen();
-    this.onAdBreak(false);
     this.root.remove();
     document.documentElement.classList.remove('player-open');
     if (this.popScope) this.popScope();
@@ -263,7 +255,6 @@ class Player {
     const token = (this.loadToken = (this.loadToken || 0) + 1);
     this.errorBox.classList.remove('show');
     this.spinner.classList.add('show');
-    this.onAdBreak(false);
     this.updateHeader();
     // Touch: show the controls briefly. TV: only the channel banner – ▲▼ zap right away, OK opens the OSD.
     if (!inputMode.isTV()) this.showOsd(false);
@@ -295,7 +286,7 @@ class Player {
       iptv.addHistory(s.sourceId, ch).catch(() => {});
       this.showZap(ch);
       this.updateFavorite();
-      // YouTube links in playlists play in the YouTube player (with SponsorBlock).
+      // YouTube links in playlists play in the YouTube player.
       const yid = youtubeId(url);
       if (yid) {
         s.youtubeFallback = yid;
@@ -354,7 +345,7 @@ class Player {
       .catch(() => {});
   }
 
-  /** YouTube trailers / links: official embedded player, SponsorBlock on top. */
+  /** YouTube trailers / links: official embedded player. */
   async startYouTube(s, token) {
     this.root.classList.remove('is-live');
     this.video.hidden = true;
@@ -375,13 +366,6 @@ class Player {
         /* ignore */
       }
     }
-    this.skipper = new SegmentSkipper(this.adapter(), (ui) => this.onSkipUi(ui));
-    fetchSponsorSegments(s.id).then((segs) => {
-      if (this.skipper && this.session === s && segs.length) {
-        this.skipper.setSegments(segs);
-        toast(`SponsorBlock: ${segs.length} Segment${segs.length > 1 ? 'e' : ''} gefunden`, { iconName: 'shield' });
-      }
-    });
   }
 
   adapter() {
@@ -532,7 +516,7 @@ class Player {
       sub = it.SeriesName ? `S${it.ParentIndexNumber || '?'}E${it.IndexNumber || '?'} · ${it.Name}` : [it.ProductionYear, jf.formatRuntime(it.RunTimeTicks)].filter(Boolean).join(' · ');
     } else if (s.kind === 'youtube') {
       title = s.title || 'YouTube';
-      sub = [s.channel, 'SponsorBlock ' + (store.get('blocker.sponsorblock.enabled') ? 'an' : 'aus')].filter(Boolean).join(' · ');
+      sub = s.channel || 'YouTube';
     } else {
       title = s.title || 'Stream';
       sub = s.subtitle || '';
@@ -953,7 +937,7 @@ class Player {
       if (inputMode.isTV() && !this.osdVisible) focus(this.skipBtn);
     } else if (ui.type === 'skipped') {
       this.hideSkip();
-      if (ui.auto && (ui.segment.source !== 'sponsorblock' || store.get('blocker.sponsorblock.notify'))) toast(`${ui.segment.label} übersprungen`, { iconName: 'skipNext' });
+      if (ui.auto) toast(`${ui.segment.label} übersprungen`, { iconName: 'skipNext' });
     } else if (ui.type === 'muted') {
       toast(`${ui.segment.label}: stummgeschaltet`, { iconName: 'mute' });
     } else if (ui.type === 'clear') this.hideSkip();
@@ -963,20 +947,6 @@ class Player {
     const hadFocus = this.skipBtn.contains(document.activeElement);
     this.skipBtn.classList.remove('show');
     if (hadFocus) this.root.focus({ preventScroll: true });
-  }
-
-  onAdBreak(on) {
-    if (on === this.inAd) return;
-    this.inAd = on;
-    this.adCover.classList.toggle('show', !!on);
-    if (!this.media) return;
-    if (on) {
-      this.adWasMuted = this.media.muted;
-      this.media.muted = true;
-    } else if (this.adWasMuted !== undefined) {
-      this.media.muted = this.adWasMuted;
-      this.adWasMuted = undefined;
-    }
   }
 
   // ------------------------------------------------------------------ input

@@ -194,3 +194,25 @@ html.mode-tv .epg-prog:focus { border-color: var(--accent); background: var(--su
 .pe-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pe-bar { grid-column: 2; height: 0.2rem; border-radius: 1rem; background: rgba(255, 255, 255, 0.15); overflow: hidden; margin-top: 0.2rem; }
 .pe-bar span { display: block; height: 100%; background: var(--accent); }
+
+/* ---------- Lampa: full screen over the whole app ---------- */
+.lampa-host { position: fixed; inset: 0; z-index: 400; display: none; background: #000; }
+.lampa-host.active { display: block; }
+html:not(.route-lampa) .lampa-host { display: none; }
+.lampa-frame { width: 100%; height: 100%; border: 0; display: block; background: #000; }
+html.lampa-open .shell { visibility: hidden; }
+.lampa-exit {
+  position: absolute;
+  left: calc(var(--safe-left) + 0.5rem);
+  bottom: calc(var(--safe-bottom) + 0.5rem);
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  display: none;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  opacity: 0.55;
+}
+.lampa-exit:hover, .lampa-exit:active { opacity: 1; }
+html.mode-touch .lampa-exit { display: grid; }

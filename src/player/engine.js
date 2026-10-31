@@ -6,15 +6,12 @@
  *  - MPEG-TS (.ts, Xtream live without extension): mpegts.js, then native.
  *  - Files (mp4, webm, mkv, mp3 …): native.
  *  - Unknown URLs: tries HLS → MPEG-TS → native in turn (each attempt with a timeout).
- *
- * The ad blocker hooks in here: VOD playlists lose their marked ad breaks; ad breaks in live streams are reported
- * through onAdBreak(true/false) so the player can mute and cover them.
+
  */
 import { loadLib } from '../core/loader.js';
 import { store } from '../core/store.js';
 import { perf } from '../core/performance.js';
 import { isIOS } from '../core/util.js';
-import { filterVodPlaylist, fragmentIsAd } from '../services/adblock.js';
 import { proxied } from '../services/net.js';
 
 const ATTEMPT_TIMEOUT = 15000;
@@ -37,14 +34,13 @@ function nativeHls(video) {
 }
 
 export class VideoEngine {
-  constructor(video, { onAdBreak, onAdsRemoved, onLevels, onTracks, onFatal } = {}) {
+  constructor(video, { onLevels, onTracks, onFatal } = {}) {
     this.video = video;
-    this.cb = { onAdBreak, onAdsRemoved, onLevels, onTracks, onFatal };
+    this.cb = { onLevels, onTracks, onFatal };
     this.hls = null;
     this.mpegts = null;
     this.kind = null; // 'hlsjs' | 'mpegts' | 'dash' | 'native'
     this.dash = null;
-    this.adState = { inAd: false };
     this.token = 0;
   }
 
@@ -198,29 +194,6 @@ export class VideoEngine {
 
   startHls(Hls, url, src, done) {
     const v = this.video;
-    const self = this;
-    const Base = Hls.DefaultConfig.loader;
-    // Playlist loader that removes ad breaks from VOD playlists before hls.js sees them.
-    class AdFilterLoader extends Base {
-      constructor(config) {
-        super(config);
-        const load = this.load.bind(this);
-        this.load = function (context, cfg, callbacks) {
-          const onSuccess = callbacks.onSuccess;
-          callbacks.onSuccess = function (response, stats, ctx, net) {
-            if (response && typeof response.data === 'string' && ctx && ctx.type !== 'manifest-master') {
-              const r = filterVodPlaylist(response.data, ctx.url || url);
-              if (r.removed) {
-                response.data = r.text;
-                if (self.cb.onAdsRemoved) self.cb.onAdsRemoved(r);
-              }
-            }
-            onSuccess(response, stats, ctx, net);
-          };
-          load(context, cfg, callbacks);
-        };
-      }
-    }
     const buffer = perf.low ? Math.min(20, store.get('player.bufferSeconds') || 30) : store.get('player.bufferSeconds') || 30;
     const hls = new Hls({
       enableWorker: true,
@@ -235,7 +208,6 @@ export class VideoEngine {
       fragLoadingMaxRetry: 4,
       manifestLoadingMaxRetry: 2,
       levelLoadingMaxRetry: 3,
-      pLoader: AdFilterLoader,
     });
     this.hls = hls;
     let networkRetries = 0;
@@ -248,12 +220,6 @@ export class VideoEngine {
     hls.on(Hls.Events.LEVEL_SWITCHED, () => this.emitLevels());
     hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => this.cb.onTracks && this.cb.onTracks());
     hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => this.cb.onTracks && this.cb.onTracks());
-    hls.on(Hls.Events.FRAG_CHANGED, (e, data) => {
-      if (!store.get('blocker.enabled') || !store.get('blocker.hlsAdFilter')) return;
-      const before = this.adState.inAd;
-      const now = fragmentIsAd(data.frag && data.frag.tagList, this.adState);
-      if (before !== now && this.cb.onAdBreak) this.cb.onAdBreak(now);
-    });
     hls.on(Hls.Events.ERROR, (e, data) => {
       if (!data.fatal) return;
       if (!started) {
@@ -376,7 +342,6 @@ export class VideoEngine {
       }
       this.mpegts = null;
     }
-    this.adState = { inAd: false };
     const v = this.video;
     try {
       v.pause();

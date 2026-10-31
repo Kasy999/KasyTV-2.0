@@ -3,21 +3,19 @@
  *
  * The Lampa page is downloaded and written into a same-origin frame (srcdoc) with a <base> pointing to its server
  * and a hook in front of Lampa's own scripts – the same technique as the Smart-TV version (lampa-boot.js):
- *  - the app's ad blocker guards Lampa's fetch/XHR/images,
- *  - Back pressed twice quickly / held, or Lampa's "exit?" question → back to Kasy's navigation,
- *  - trailers open in Kasy's YouTube player (with SponsorBlock).
+ *  - Lampa fills the whole screen (no Kasy navigation or toolbar),
+ *  - Back pressed twice quickly / held, or Lampa's "exit?" question → leaves Lampa (previous Kasy view),
+ *  - trailers open in Kasy's player.
  * If the Lampa server doesn't allow the download (CORS), Lampa runs as a plain iframe without the hook.
  * The frame stays alive while switching tabs, so Lampa keeps its state.
  */
 import { h, icon } from '../core/dom.js';
 import { store } from '../core/store.js';
-import { focus, focusFirst } from '../core/focus.js';
 import { inputMode } from '../core/input-mode.js';
-import { navigate } from '../core/router.js';
+import { back as routerBack } from '../core/router.js';
 import { isMixedContent } from '../core/util.js';
 import { toast } from '../components/toast.js';
-import { guardWindow } from '../services/adblock.js';
-import { youtubeId } from '../services/sponsorblock.js';
+import { youtubeId } from '../services/segments.js';
 import { playYouTube } from '../player/player.js';
 
 let host = null;
@@ -45,15 +43,15 @@ function lampaUrl() {
   return u;
 }
 
+/** Leaves the full-screen Lampa: back to the previous Kasy view (start view if Lampa was opened first). */
 function exitToNav() {
-  const first = document.querySelector('.nav .nav-item.active') || document.querySelector('.nav .nav-item');
   if (frame) frame.blur();
-  if (first) focus(first);
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  routerBack();
 }
 
 /** Installed into Lampa's window before its scripts run. */
 window.__kasyLampaHook = function (win) {
-  guardWindow(win);
   let lastBack = 0;
   let held = false;
   const isBack = (e) => e.keyCode === 10009 || e.keyCode === 461 || e.key === 'GoBack' || e.key === 'BrowserBack';
@@ -116,7 +114,7 @@ window.__kasyLampaHook = function (win) {
       };
     },
   );
-  // Trailers → Kasy's YouTube player with SponsorBlock.
+  // Trailers → Kasy's player.
   whenReady(
     () => win.Lampa && win.Lampa.YouTube && typeof win.Lampa.YouTube.play === 'function',
     () => {
@@ -166,31 +164,14 @@ async function buildFrame(url) {
   return f;
 }
 
-export async function lampaView(el) {
+export async function lampaView() {
   const url = lampaUrl();
-  const toolbar = h(
-    'div.lampa-bar',
-    { data: { focusGroup: true } },
-    h('span.lampa-title', icon('lamp'), 'Lampa'),
-    h('span.lampa-mode.muted'),
-    h('span.spacer'),
-    h('button.icon-btn.small', { type: 'button', data: { focus: true }, title: 'Lampa bedienen', 'aria-label': 'In Lampa wechseln', onClick: () => enterFrame() }, icon('down')),
-    h('button.icon-btn.small', { type: 'button', data: { focus: true }, title: 'Neu laden', 'aria-label': 'Neu laden', onClick: () => reload() }, icon('refresh')),
-    h('button.icon-btn.small', { type: 'button', data: { focus: true }, title: 'Lampa-Einstellungen', 'aria-label': 'Einstellungen', onClick: () => navigate('/settings/lampa') }, icon('settings')),
-  );
-  el.append(toolbar);
-
   if (!host) {
     host = h('div.lampa-host');
-    document.querySelector('.content').appendChild(host);
+    // Small exit button for touch screens (no Back key on iPhone/iPad).
+    host.appendChild(h('button.lampa-exit', { type: 'button', 'aria-label': 'Lampa verlassen', title: 'Lampa verlassen', onClick: () => exitToNav() }, icon('back')));
+    document.body.appendChild(host);
   }
-  const reload = async () => {
-    if (frame) frame.remove();
-    frame = await buildFrame(url);
-    loadedUrl = url;
-    host.replaceChildren(frame);
-    toolbar.querySelector('.lampa-mode').textContent = mode === 'hooked' ? 'integriert · Werbeblocker aktiv' : 'eingebettet';
-  };
   const enterFrame = () => {
     if (!frame) return;
     frame.focus();
@@ -200,16 +181,25 @@ export async function lampaView(el) {
       /* cross-origin */
     }
   };
-  if (!frame || loadedUrl !== url) await reload();
-  else toolbar.querySelector('.lampa-mode').textContent = mode === 'hooked' ? 'integriert · Werbeblocker aktiv' : 'eingebettet';
+  if (!frame || loadedUrl !== url) {
+    if (frame) frame.remove();
+    frame = await buildFrame(url);
+    loadedUrl = url;
+    host.insertBefore(frame, host.firstChild);
+  }
   host.classList.add('active');
-  const hint = inputMode.isTV() ? 'Zurück zweimal schnell oder gedrückt halten → Navigation' : null;
-  if (hint) toast(hint, { duration: 3500, iconName: 'remote' });
-  if (inputMode.isTV()) setTimeout(enterFrame, 300);
-  else focusFirst(toolbar);
+  document.documentElement.classList.add('lampa-open');
+  // TV / desktop: real full screen of the device (no browser bars). Silently ignored where not allowed.
+  if (inputMode.isTV() && document.documentElement.requestFullscreen && !document.fullscreenElement) {
+    document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+  }
+  if (inputMode.isTV()) toast('Zurück zweimal schnell oder gedrückt halten → Lampa verlassen', { duration: 3500, iconName: 'remote' });
+  setTimeout(enterFrame, 300);
   return {
     unmount() {
       host.classList.remove('active');
+      document.documentElement.classList.remove('lampa-open');
+      if (frame) frame.blur();
     },
   };
 }

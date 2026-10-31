@@ -1,4 +1,4 @@
-/** Einstellungen – all configuration, incl. Zeichen-Typ-Bereich, Werbeblocker/SponsorBlock and backup. */
+/** Einstellungen – all configuration, incl. Zeichen-Typ-Bereich and backup. */
 import { h, icon, button } from '../core/dom.js';
 import { store } from '../core/store.js';
 import { bus } from '../core/events.js';
@@ -11,8 +11,6 @@ import { toggleRow, selectRow, stepperRow, colorRow, textRow, actionRow, infoRow
 import { confirmDialog, dialog, promptDialog, pickOption } from '../components/dialog.js';
 import { toast } from '../components/toast.js';
 import { FONTS, EDGE_STYLES, COLORS, ACCENTS } from '../services/text-style.js';
-import { SB_CATEGORIES } from '../services/sponsorblock.js';
-import { DEFAULT_HOSTS, blockedTotal } from '../services/adblock.js';
 import * as iptv from '../services/iptv.js';
 import * as jf from '../services/jellyfin.js';
 import * as epg from '../services/epg.js';
@@ -27,7 +25,6 @@ const SECTIONS = [
   { id: 'iptv', label: 'IPTV-Quellen', icon: 'tv' },
   { id: 'jellyfin', label: 'Jellyfin', icon: 'film' },
   { id: 'player', label: 'Player', icon: 'play' },
-  { id: 'blocker', label: 'Werbeblocker & SponsorBlock', icon: 'shield' },
   { id: 'text', label: 'Zeichen & Untertitel', icon: 'text' },
   { id: 'lampa', label: 'Lampa', icon: 'lamp' },
   { id: 'backup', label: 'Speicher & Backup', icon: 'save' },
@@ -297,43 +294,7 @@ const BUILDERS = {
         ]),
         stepperRow('Sprungweite', '◀ ▶ auf der Fernbedienung, Doppeltipp am Rand', 'player.seekStep', { min: 5, max: 60, step: 5, format: (v) => v + ' s' }),
         stepperRow('Bedienleiste ausblenden nach', null, 'player.osdTimeout', { min: 2, max: 15, step: 1, format: (v) => v + ' s' }),
-      ),
-    ];
-  },
-
-  async blocker(render) {
-    const cats = store.get('blocker.sponsorblock.categories');
-    const segActions = [
-      { value: 'skip', label: 'Automatisch überspringen' },
-      { value: 'button', label: 'Knopf „Überspringen“ zeigen' },
-      { value: 'mute', label: 'Stummschalten' },
-      { value: 'off', label: 'Ignorieren' },
-    ];
-    const rulesCount = (store.get('blocker.customRules') || '').split('\n').filter((l) => l.trim() && !l.trim().startsWith('!')).length;
-    return [
-      section(
-        'Werbeblocker',
-        toggleRow('Werbeblocker aktiv', `Sperrt ${DEFAULT_HOSTS.length}+ Werbe- und Tracking-Server für die App und das integrierte Lampa. Bisher blockiert: ${blockedTotal()} Anfragen in dieser Sitzung.`, 'blocker.enabled'),
-        toggleRow('Werbepausen in Streams', 'VOD: markierte Werbeblöcke (CUE-OUT/SCTE-35) werden entfernt. Live: Werbepausen werden stummgeschaltet und abgedeckt.', 'blocker.hlsAdFilter'),
-        actionRow('Eigene Filterregeln', `${rulesCount} eigene Regeln. Formate: „||host.tld^“, „host.tld“, Hosts-Datei-Zeilen oder Textteile wie „/ads/“.`, 'Bearbeiten', async () => {
-          const ta = h('textarea.input.code', { rows: 10, data: { focus: true }, spellcheck: 'false', autocapitalize: 'off', placeholder: '||werbung.example.com^\ntracker.example.net\n/ads/' });
-          ta.value = store.get('blocker.customRules') || '';
-          const ok = await dialog({ title: 'Eigene Filterregeln', wide: true, body: h('div.form', ta, h('p.hint', 'Eine Regel pro Zeile. Zeilen mit ! sind Kommentare.')), actions: [{ label: 'Abbrechen', value: false }, { label: 'Speichern', value: true, primary: true }] });
-          if (ok) {
-            store.set('blocker.customRules', ta.value);
-            render();
-          }
-        }, { iconName: 'text' }),
-        h('p.hint', 'Grenzen: Werbung innerhalb fremder Rahmen (YouTube-Player, Lampa ohne Integration) kann eine Web-App nicht entfernen.'),
-      ),
-      section(
-        'SponsorBlock (YouTube)',
-        toggleRow('SponsorBlock aktiv', 'Überspringt gesponserte Abschnitte & Co. in YouTube-Videos – Daten der Community (sponsor.ajay.app), Abfrage anonym per Hash-Präfix.', 'blocker.sponsorblock.enabled'),
-        toggleRow('Hinweis beim Überspringen', null, 'blocker.sponsorblock.notify'),
-        ...SB_CATEGORIES.map((c) => selectRow(c.label, c.desc, 'blocker.sponsorblock.categories.' + c.id, segActions.filter((a) => a.value !== 'mute' || c.id === 'sponsor' || c.id === 'selfpromo' || c.id === 'music_offtopic'))),
-        textRow('Server', 'Eigene SponsorBlock-Instanz (optional)', 'blocker.sponsorblock.server', { placeholder: 'https://sponsor.ajay.app' }),
-        h('p.hint', `Aktuell überspringen: ${Object.keys(cats).filter((k) => cats[k] === 'skip').length} Kategorien.`),
-      ),
+      ),,
       section(
         'Intro & Abspann (Jellyfin)',
         h('p.hint', 'Nutzt die Segmente von Jellyfin 10.10 (Media Segments) bzw. des Intro-Skipper-Plugins.'),
@@ -342,9 +303,15 @@ const BUILDERS = {
           ['Outro', 'Abspann'],
           ['Recap', 'Rückblick'],
           ['Preview', 'Vorschau'],
-          ['Commercial', 'Werbung'],
-        ].map(([k, label]) => selectRow(label, null, 'blocker.mediaSegments.' + k, segActions.filter((a) => a.value !== 'mute'))),
-      ),
+          ['Commercial', 'Werbeblock'],
+        ].map(([k, label]) =>
+          selectRow(label, null, 'player.skipSegments.' + k, [
+            { value: 'skip', label: 'Automatisch überspringen' },
+            { value: 'button', label: 'Knopf „Überspringen“ zeigen' },
+            { value: 'off', label: 'Ignorieren' },
+          ]),
+        ),
+      )
     ];
   },
 
@@ -534,7 +501,7 @@ const BUILDERS = {
           h('li', 'Desktop (Chrome/Edge): Installieren-Symbol in der Adressleiste.'),
         ),
       ),
-      section(null, h('p.hint', 'Bibliotheken: hls.js (Apache-2.0), mpegts.js (Apache-2.0). SponsorBlock-Daten: sponsor.ajay.app (CC BY-NC-SA 4.0). Schriften: SIL Open Font License.')),
+      section(null, h('p.hint', 'Bibliotheken: hls.js (Apache-2.0), mpegts.js (Apache-2.0), dash.js (BSD-3). Lampa: github.com/yumata/lampa (GPL-2.0). Schriften: SIL Open Font License.')),
     ];
   },
 };

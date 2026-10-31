@@ -19,7 +19,7 @@ npm install          # holt Vite, hls.js, mpegts.js und kopiert die Player-Libs 
 npm run dev          # Entwicklungsserver: http://localhost:5173 (auch im Heimnetz erreichbar)
 npm run build        # fertige App in dist/
 npm run serve        # dist/ ausliefern + CORS-Proxy: http://<PC-IP>:8080
-npm test             # Tests (M3U-Parser, Werbeblocker, Segment-Skipper)
+npm test             # Tests (M3U-Parser, EPG/Archiv, Segment-Skipper)
 ```
 
 Ohne `npm install` (nur Node 18+): `node tools/serve.mjs .` startet die Quellen direkt. Die Player-Bibliotheken
@@ -96,20 +96,11 @@ Intro-Skipper-Plugin.
 
 ### Lampa
 Lampa (oder ein Wampa-/eigener Lampa-Server) läuft als integriertes Modul: die Seite wird geladen und mit einem
-Hook in einen Rahmen gleicher Herkunft geschrieben – Werbeblocker greift, Trailer laufen im Kasy-Player (offizieller YouTube-Player) mit
-SponsorBlock, Lampas „Beenden?“-Frage führt zur Navigation. Erlaubt der Lampa-Server das Laden nicht (CORS),
+Hook in einen Rahmen gleicher Herkunft geschrieben und **im Vollbild** angezeigt (ohne Kasy-Leisten). Verlassen:
+Zurück zweimal schnell oder gedrückt halten, Lampas „Beenden?“-Frage oder (Touch) der kleine Knopf unten links. Erlaubt der Lampa-Server das Laden nicht (CORS),
 läuft Lampa als normales iframe. Zustand bleibt beim Tab-Wechsel erhalten.
 Lokal mitliefern: den Lampa-Build (github.com/yumata/lampa) nach `public/lampa/` kopieren und unter
 Einstellungen → Lampa die Quelle „Lokal“ wählen.
-
-### Werbeblocker & SponsorBlock
-* Netzwerk-Sperre (fetch/XHR/Bilder) für 60+ Werbe-/Tracking-Domains + eigene Regeln (`||host^`, Hosts-Datei,
-  Textteile) – für die App und das integrierte Lampa.
-* **HLS-Werbepausen:** VOD-Playlists verlieren markierte Werbeblöcke (`#EXT-X-CUE-OUT/IN`, SCTE-35, Apple
-  Interstitials, Segmente von Werbe-Hosts). Bei Live-Streams werden Werbepausen stummgeschaltet und abgedeckt.
-* **SponsorBlock** für YouTube (YouTube-Links in Playlists, Jellyfin-/Lampa-Trailer im offiziellen Player): je
-  Kategorie *überspringen*, *Knopf zeigen*, *stumm* oder *ignorieren*. Datenschutzfreundliche Hash-Abfrage.
-* Grenzen: Werbung im offiziellen YouTube-Player (Trailer) und in fremden iframes kann keine Web-App entfernen.
 
 ### Zeichen-Typ-Bereich (Einstellungen → Zeichen & Untertitel)
 Untertitel: Schrift (7 Schriften der Android-App + System), Größe, Stärke, Kursiv, Großbuchstaben, Text-/
@@ -153,13 +144,13 @@ pwa/
   public/icons/              App-Icons (aus dem Android-Launcher-Icon)
   public/vendor/             hls.js / mpegts.js (von npm install kopiert)
   public/lampa/              optional: lokaler Lampa-Build
-  src/main.js                Start: Speicher, Eingabemodus, Performance, Werbeblocker, Service Worker
+  src/main.js                Start: Speicher, Eingabemodus, Performance, Service Worker
   src/app.js                 Shell: Navigationsleiste (Rail / Tab-Bar), Routen
   src/core/                  dom, store (localStorage), db (IndexedDB), router (Hash + Overlay-History),
                              focus (D-Pad-Raster), input-mode, performance, loader, util
-  src/services/              m3u-parser (+ Worker), iptv, jellyfin, adblock, sponsorblock, youtube,
+  src/services/              m3u-parser (+ Worker), iptv, epg, catchup, jellyfin, segments,
                              backup, resume, text-style, net
-  src/player/                player (OSD, Gesten, Tasten), engine (hls.js/mpegts/nativ + Werbepausen),
+  src/player/                player (OSD, Gesten, Tasten), engine (hls.js/mpegts/dash.js/nativ),
                              subtitles (eigener Renderer), youtube-engine (IFrame-API)
   src/components/            dialog, toast, cards, controls (Einstellungs-Zeilen)
   src/views/                 home, live, library (Jellyfin), lampa, youtube, settings

@@ -64,7 +64,6 @@ self.addEventListener('activate', function (event) {
 
 self.addEventListener('message', function (event) {
   var data = event.data || {};
-  if (data.type === 'SKIP_WAITING') self.skipWaiting();
   if (data.type === 'CLEAR_RUNTIME') {
     caches.delete(RUNTIME);
     caches.delete(IMAGES);

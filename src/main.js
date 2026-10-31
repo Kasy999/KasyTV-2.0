@@ -7,7 +7,6 @@ import { initFocus, focusFirst } from './core/focus.js';
 import { bus } from './core/events.js';
 import { isIOS, isStandalone } from './core/util.js';
 import { initTextStyles } from './services/text-style.js';
-import { initAdblock } from './services/adblock.js';
 import { daysSinceBackup, exportBackup } from './services/backup.js';
 import { mountApp, showBanner } from './app.js';
 import { toast } from './components/toast.js';
@@ -26,7 +25,6 @@ async function boot() {
   initInputMode();
   initPerformance();
   initTextStyles();
-  initAdblock();
 
   const root = document.getElementById('app');
   const { banner } = mountApp(root);
@@ -34,7 +32,7 @@ async function boot() {
   document.documentElement.classList.remove('boot');
   if (inputMode.isTV()) requestAnimationFrame(() => focusFirst(root));
 
-  registerServiceWorker(banner);
+  registerServiceWorker();
   hints(banner);
 
   // Installed PWAs get persistent storage more easily (Safari/Chrome) – ask once quietly.
@@ -44,47 +42,13 @@ async function boot() {
   window.addEventListener('offline', () => toast('Offline – gespeicherte Inhalte bleiben verfügbar', { kind: 'warn', duration: 5000 }));
 }
 
-function registerServiceWorker(banner) {
+/**
+ * Service worker only for the offline start from the homescreen. No update prompt: a new version is fetched
+ * by the browser in the background and simply used at the next start.
+ */
+function registerServiceWorker() {
   if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
-  const run = async () => {
-    try {
-      const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-      let updateRequested = false;
-      const offer = (worker) => {
-        showBanner(banner, {
-          text: 'Eine neue Version von Kasy TV ist bereit.',
-          actionLabel: 'Aktualisieren',
-          iconName: 'refresh',
-          onAction: () => {
-            updateRequested = true;
-            worker.postMessage({ type: 'SKIP_WAITING' });
-          },
-        });
-      };
-      if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
-      reg.addEventListener('updatefound', () => {
-        const w = reg.installing;
-        if (!w) return;
-        w.addEventListener('statechange', () => {
-          if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w);
-        });
-      });
-      // Reload only for an update the user accepted – not when the very first worker takes control
-      // (that would reload the page in the middle of whatever the user is doing).
-      let reloaded = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (reloaded || !updateRequested) return;
-        reloaded = true;
-        location.reload();
-      });
-      // Check for updates when the app comes back to the foreground.
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') reg.update().catch(() => {});
-      });
-    } catch (e) {
-      console.warn('[sw] Registrierung fehlgeschlagen', e);
-    }
-  };
+  const run = () => navigator.serviceWorker.register('./sw.js', { scope: './' }).catch((e) => console.warn('[sw]', e));
   if (document.readyState === 'complete') setTimeout(run, 500);
   else window.addEventListener('load', run);
 }

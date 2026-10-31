@@ -63,30 +63,10 @@ export const DEFAULTS = {
     osdTimeout: 4,
     seekStep: 10,
     lowLatencyLive: false,
-  },
-  blocker: {
-    enabled: true,
-    hlsAdFilter: true, // remove marked ad breaks from VOD playlists, mute them in live streams
-    customRules: '',
-    sponsorblock: {
-      enabled: true,
-      server: 'https://sponsor.ajay.app',
-      // per category: skip | button | mute | off
-      categories: {
-        sponsor: 'skip',
-        selfpromo: 'skip',
-        interaction: 'skip',
-        intro: 'button',
-        outro: 'button',
-        preview: 'button',
-        music_offtopic: 'off',
-        filler: 'off',
-      },
-      notify: true,
-    },
     // Jellyfin media segments (Intro Skipper / Jellyfin 10.10): skip | button | off
-    mediaSegments: { Intro: 'button', Outro: 'button', Recap: 'button', Preview: 'off', Commercial: 'skip' },
+    skipSegments: { Intro: 'button', Outro: 'button', Recap: 'button', Preview: 'off', Commercial: 'skip' },
   },
+
   text: {
     subtitle: {
       font: 'Inter',

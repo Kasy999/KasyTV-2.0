@@ -1,7 +1,7 @@
 /**
  * YouTube playback through the official IFrame player API, exposed with the same small interface as a <video>
  * element (currentTime, duration, paused, play(), pause(), muted, volume, events) – so the Kasy OSD, the remote
- * keys and the SponsorBlock skipper work unchanged on top of it.
+ * keys work unchanged on top of it.
  */
 import { loadLib } from '../core/loader.js';
 import { store } from '../core/store.js';
