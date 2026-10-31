@@ -39,6 +39,17 @@ export function normalizeName(name) {
     .replace(NON_ALNUM, '');
 }
 
+/** Match keys of a name: normalised, plus without generic words ("BR Fernsehen" ↔ "BR", "Bibel TV" ↔ "Bibel"). */
+export function nameKeys(name) {
+  const keys = new Set();
+  const a = normalizeName(name);
+  if (a) keys.add(a);
+  const stripped = String(name || '').replace(/@[^@]*$/, '').replace(/\b(fernsehen|television|tv|channel|kanal|sender)\b/gi, ' ');
+  const b = normalizeName(stripped);
+  if (b && b.length >= 2) keys.add(b);
+  return keys;
+}
+
 /** XMLTV id without the iptv-org feed suffix ("3sat.de@SD" → "3sat.de"), lower case. */
 function baseId(id) {
   return String(id || '').toLowerCase().replace(/@[^@]*$/, '').trim();
@@ -285,13 +296,9 @@ export async function refreshEpg(sourceId) {
       if (ch.tvgId) {
         add(byId, ch.tvgId, ch.id);
         add(byBaseId, baseId(ch.tvgId), ch.id);
-        const k = normalizeName(ch.tvgId);
-        if (k) add(byName, k, ch.id);
+        for (const k of nameKeys(ch.tvgId)) add(byName, k, ch.id);
       }
-      for (const n of [ch.tvgName, ch.name]) {
-        const k = normalizeName(n);
-        if (k) (byName.get(k) || byName.set(k, []).get(k)).push(ch.id);
-      }
+      for (const n of [ch.tvgName, ch.name]) for (const k of nameKeys(n)) add(byName, k, ch.id);
       if (ch.catchup && ch.catchup.days > maxDays) maxDays = ch.catchup.days;
     }
     const now = Date.now();
@@ -301,9 +308,7 @@ export async function refreshEpg(sourceId) {
       acceptChannel(id, names) {
         const out = new Set(byId.get(id) || byBaseId.get(baseId(id)) || []);
         if (!out.size) {
-          const k = normalizeName(id);
-          for (const x of byName.get(k) || []) out.add(x);
-          for (const n of names) for (const x of byName.get(normalizeName(n)) || []) out.add(x);
+          for (const n of [id, ...names]) for (const k of nameKeys(n)) for (const x of byName.get(k) || []) out.add(x);
         }
         return Array.from(out);
       },

@@ -77,7 +77,12 @@ Jellyfin im Heimnetz (`http://192.168…:8096`), HTTP-Playlists und HTTP-Streams
   Pause; Touch: erster Tipp = Vorschau, zweiter Tipp = Vollbild). Stoppt automatisch, wenn der Vollbild-Player
   läuft, damit TV-Sticks nie zwei Streams gleichzeitig dekodieren.
 * **TV-Programm (EPG) mit Archiv:** XMLTV aus der Playlist (url-tvg) oder eigene Adresse, auch `.gz`, wird
-  gestreamt gelesen. Programmführer mit Senderliste, Tagen (so weit zurück wie das Archiv des Anbieters reicht),
+  gestreamt gelesen. Fehlt das EPG, sperrt der Anbieter den Abruf (CORS) oder passt es auf fast keinen Sender,
+  nutzt die App das **freie Kasy-EPG**: Der GitHub-Workflow spiegelt alle 6 Stunden freie XMLTV-Daten
+  (Deutschland/Österreich/Schweiz, Quellen in `epg-sources.json`) nach `./epg/` auf derselben Seite. Die
+  Zuordnung versteht tvg-id, iptv-org-IDs (`3sat.de@SD`) und Sendernamen („BR Fernsehen (720p)“ ↔ „BR“).
+  **Archiv erzwingen** (Einstellungen → IPTV-Quellen): für Anbieter, die Archiv bieten, es aber nicht in die
+  Playlist schreiben (Shift, Xtream, Flussonic oder eigene Vorlage). Programmführer mit Senderliste, Tagen (so weit zurück wie das Archiv des Anbieters reicht),
   laufender Sendung mit Fortschritt. Vergangene Sendungen spielen **aus dem Archiv** (catchup default/append/shift,
   Flussonic, Xtream, catchup-source mit Platzhaltern), die laufende Sendung „Live“ oder „Von Anfang“. Jetzt/Danach
   in der Vorschau, in der Listenansicht und im Player; im Player öffnet die Taste GUIDE bzw. das Programm-Symbol den

@@ -71,3 +71,12 @@ test('name/id normalisation for iptv-org and open-epg ids', () => {
   assert.equal(normalizeName('Das Erste HD [Geo-blocked]'), 'daserste');
   assert.equal(normalizeName('ZDF'), 'zdf');
 });
+
+test('generic words are optional when matching', async () => {
+  const { nameKeys } = await import('../src/services/epg.js');
+  const inter = (a, b) => [...nameKeys(a)].some((k) => nameKeys(b).has(k));
+  assert.ok(inter('BR Fernsehen (720p)', 'BR.de'));
+  assert.ok(inter('WDR Fernsehen', 'WDR'));
+  assert.ok(inter('Bibel TV (720p)', 'Bibel TV.de'));
+  assert.ok(!inter('ZDFneo', 'ZDF'));
+});
