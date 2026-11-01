@@ -11,6 +11,7 @@ import { store } from '../core/store.js';
 import { bus } from '../core/events.js';
 import { loadLib } from '../core/loader.js';
 import { proxied } from './net.js';
+import { hashString, isMixedContent } from '../core/util.js';
 import { getPlaylist, getSources } from './iptv.js';
 
 const DAY = 86400000;
@@ -63,6 +64,26 @@ export const MIRRORS = [
 ];
 export function mirrorUrl(id) {
   return new URL(`./epg/${id}.xml.gz`, location.href).href;
+}
+
+/**
+ * EPG addresses from playlists (url-tvg) that the provider doesn't let web apps load (CORS) are mirrored by
+ * the GitHub workflow as well: one file per address in epg-urls/ → ./epg/m3u/<hash>.xml.gz on the app's origin.
+ */
+export function m3uMirrorId(url) {
+  return hashString(String(url).trim());
+}
+export function m3uMirrorUrl(url) {
+  return new URL(`./epg/m3u/${m3uMirrorId(url)}.xml.gz`, location.href).href;
+}
+
+/** GitHub page that adds an EPG address to the mirror (one commit, the workflow does the rest). */
+export function mirrorRegisterLink(url) {
+  const m = /^([a-z0-9-]+)\.github\.io$/i.exec(location.hostname || '');
+  const repo = (location.pathname || '').split('/').filter(Boolean)[0];
+  if (!m || !repo) return null;
+  const q = new URLSearchParams({ filename: `epg-urls/${m3uMirrorId(url)}.txt`, value: String(url).trim() + '\n' });
+  return `https://github.com/${m[1]}/${repo}/new/main?${q}`;
 }
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
@@ -191,18 +212,33 @@ export class XmltvParser {
 
 // ---------------------------------------------------------------- download
 
-async function openStream(url) {
-  let res;
-  try {
-    res = await fetch(url, { cache: 'no-store' });
-  } catch (e) {
-    const p = proxied(url);
-    if (!p) throw new Error('EPG nicht abrufbar (CORS/Netzwerk). Tipp: CORS-Proxy in den IPTV-Einstellungen eintragen.');
-    res = await fetch(p, { cache: 'no-store' });
+/**
+ * Opens an EPG address. Tries in turn: directly, the HTTPS variant of an HTTP address (HTTPS app), the
+ * configured proxy, and the Kasy mirror of this address (epg-urls/ in the repository).
+ * → { res, via: 'direct' | 'https' | 'proxy' | 'mirror' }
+ */
+async function openStream(url, { mirror = false } = {}) {
+  const tries = [];
+  if (!isMixedContent(url)) tries.push(['direct', url]);
+  else tries.push(['https', url.replace(/^http:/i, 'https:')]);
+  const p = proxied(url);
+  if (p) tries.push(['proxy', p]);
+  if (mirror) tries.push(['mirror', m3uMirrorUrl(url)]);
+  let last = null;
+  for (const [via, u] of tries) {
+    try {
+      const res = await fetch(u, { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      if (!res.body || !res.body.getReader) throw new Error('Browser kann das EPG nicht stückweise lesen');
+      return { res, via };
+    } catch (e) {
+      last = via === 'mirror' ? new Error('noch nicht im Kasy-Spiegel') : e;
+    }
   }
-  if (!res.ok) throw new Error('EPG: HTTP ' + res.status);
-  if (!res.body || !res.body.getReader) throw new Error('Browser kann das EPG nicht stückweise lesen');
-  return res;
+  const blocked = !last || /fetch|network|cors|load failed/i.test(last.message) || last.message === 'noch nicht im Kasy-Spiegel';
+  const err = new Error(blocked ? 'Der Anbieter erlaubt Web-Apps den Abruf nicht (CORS)' : 'EPG: ' + last.message);
+  err.blocked = blocked;
+  throw err;
 }
 
 /** Reads a response as text chunks, gunzipping .gz on the fly (DecompressionStream or pako). */
@@ -270,6 +306,14 @@ function sourceEpgUrls(source, playlist) {
   return own.length ? own : (playlist.epgUrls || []).slice(0, 3);
 }
 
+function hostOf(u) {
+  try {
+    return new URL(u).hostname;
+  } catch {
+    return u;
+  }
+}
+
 function mirrorUrls() {
   const m = store.get('iptv.epgMirror');
   return m && m !== 'off' ? [mirrorUrl(m)] : [];
@@ -317,23 +361,33 @@ export async function refreshEpg(sourceId) {
     const parser = new XmltvParser(filter);
     let lastError = null;
     const used = [];
-    const tryUrls = async (urls) => {
+    const via = {};
+    const blocked = [];
+    const tryUrls = async (urls, { mirror = false } = {}) => {
       for (const url of urls) {
         try {
-          const res = await openStream(url);
-          await readText(res, (t) => parser.feed(t), (bytes) => bus.emit('epg:progress', { sourceId, bytes, url }));
+          const o = await openStream(url, { mirror });
+          await readText(o.res, (t) => parser.feed(t), (bytes) => bus.emit('epg:progress', { sourceId, bytes, url }));
           used.push(url);
+          via[url] = o.via;
         } catch (e) {
           lastError = e;
+          if (mirror && e.blocked) blocked.push(url);
           console.warn('[epg]', url, e.message);
         }
       }
     };
-    await tryUrls(primary);
+    // EPG of the playlist (url-tvg) or the address set for the source.
+    await tryUrls(primary, { mirror: true });
     // Provider EPG missing or blocked (CORS) → free mirrored EPG; also when it matched almost no channel.
     let primaryFailed = primary.length > 0 && !used.length;
     if (mirrors.length && (!used.length || Object.keys(parser.programs).length < Math.min(5, playlist.channels.length))) {
       await tryUrls(mirrors.filter((m) => !used.includes(m)));
+    }
+    if (!used.length && blocked.length) {
+      const err = new Error(`Das EPG der Playlist (${hostOf(blocked[0])}) sperrt Web-Apps (CORS). Unter Einstellungen → IPTV-Quellen → „EPG der Playlist freischalten“ einmalig für den Kasy-Spiegel freigeben.`);
+      err.blocked = blocked;
+      throw err;
     }
     if (!used.length) throw lastError || new Error('EPG nicht ladbar');
     const { programs, count } = parser.finish();
@@ -343,6 +397,9 @@ export async function refreshEpg(sourceId) {
       channels: Object.keys(programs).length,
       total: playlist.channels.length,
       sources: used,
+      via,
+      primary,
+      blocked,
       primaryFailed: primaryFailed ? (lastError && lastError.message) || 'nicht ladbar' : null,
       updatedAt: Date.now(),
     };
@@ -353,10 +410,28 @@ export async function refreshEpg(sourceId) {
   })();
   loading.set(sourceId, job);
   try {
-    return await job;
+    const d = await job;
+    errors.delete(sourceId);
+    return d;
+  } catch (e) {
+    errors.set(sourceId, e);
+    bus.emit('epg:error', { sourceId, error: e });
+    throw e;
   } finally {
     loading.delete(sourceId);
   }
+}
+
+/** Last load error of a source (with .blocked = addresses the provider doesn't let web apps load). */
+export function epgError(sourceId) {
+  return errors.get(sourceId) || null;
+}
+
+/** EPG addresses of a source: own setting, otherwise url-tvg of the playlist. */
+export async function playlistEpgUrls(sourceId) {
+  const source = getSources().find((s) => s.id === sourceId);
+  const playlist = await getPlaylist(sourceId);
+  return source && playlist ? sourceEpgUrls(source, playlist) : [];
 }
 
 /** EPG of a source from memory/IndexedDB; loads in the background when missing or older than 12 h. */
@@ -376,6 +451,8 @@ export async function getEpg(sourceId, { autoRefresh = true } = {}) {
   }
   return data;
 }
+
+const errors = new Map();
 
 export function epgStatus(sourceId) {
   return memo.get(sourceId) || null;

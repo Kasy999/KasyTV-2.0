@@ -74,9 +74,65 @@ function patchHistory(win) {
   });
 }
 
+/**
+ * In the blob frame location.protocol is "blob:", so Lampa (and mirrors like bylampa.online) no longer switch
+ * their http:// addresses to https:// – plugins, CUB/TMDB requests and scripts would be blocked as mixed
+ * content in the HTTPS app. Upgrade them here: scripts, styles, frames, media, XHR and fetch.
+ * Local addresses (TorrServer in the home network …) stay unchanged.
+ */
+const LOCAL = /^http:\/\/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|[^/]*\.local[:/])/i;
+export function upgradeUrl(u) {
+  if (typeof u !== 'string' || !/^http:\/\//i.test(u) || LOCAL.test(u) || location.protocol !== 'https:') return u;
+  return 'https://' + u.slice(7);
+}
+
+function patchMixedContent(win) {
+  try {
+    const xo = win.XMLHttpRequest.prototype.open;
+    win.XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+      return xo.call(this, method, upgradeUrl(String(url)), ...rest);
+    };
+    if (win.fetch) {
+      const f = win.fetch;
+      win.fetch = function (input, init) {
+        return f.call(this, typeof input === 'string' ? upgradeUrl(input) : input, init);
+      };
+    }
+    const props = [
+      [win.HTMLScriptElement, 'src'],
+      [win.HTMLLinkElement, 'href'],
+      [win.HTMLIFrameElement, 'src'],
+      [win.HTMLImageElement, 'src'],
+      [win.HTMLMediaElement, 'src'],
+      [win.HTMLSourceElement, 'src'],
+    ];
+    for (const [cls, prop] of props) {
+      if (!cls) continue;
+      const d = Object.getOwnPropertyDescriptor(cls.prototype, prop);
+      if (!d || !d.set) continue;
+      Object.defineProperty(cls.prototype, prop, {
+        configurable: true,
+        enumerable: d.enumerable,
+        get: d.get,
+        set(v) {
+          d.set.call(this, upgradeUrl(v));
+        },
+      });
+    }
+    const sa = win.Element.prototype.setAttribute;
+    win.Element.prototype.setAttribute = function (name, value) {
+      if ((name === 'src' || name === 'href') && typeof value === 'string') value = upgradeUrl(value);
+      return sa.call(this, name, value);
+    };
+  } catch (e) {
+    console.warn('[lampa] https-Umstellung nicht möglich', e);
+  }
+}
+
 /** Installed into Lampa's window before its scripts run. */
 window.__kasyLampaHook = function (win) {
   patchHistory(win);
+  patchMixedContent(win);
   let lastBack = 0;
   let held = false;
   const isBack = (e) => e.keyCode === 10009 || e.keyCode === 461 || e.key === 'GoBack' || e.key === 'BrowserBack';

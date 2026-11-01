@@ -80,3 +80,14 @@ test('generic words are optional when matching', async () => {
   assert.ok(inter('Bibel TV (720p)', 'Bibel TV.de'));
   assert.ok(!inter('ZDFneo', 'ZDF'));
 });
+
+test('playlist EPG mirror: app and workflow script use the same file name', async () => {
+  const { hashString } = await import('../src/core/util.js');
+  const src = (await import('node:fs')).readFileSync(new URL('../scripts/fetch-epg.mjs', import.meta.url), 'utf8');
+  const body = /export function hashString\(s\) \{([\s\S]*?)\n\}/.exec(src)[1];
+  const scriptHash = new Function('s', body);
+  for (const u of ['http://epg.example.com/epg.xml.gz', 'https://a.b/c?d=1', 'http://iptvx.one/EPG']) assert.equal(scriptHash(u), hashString(u));
+  const { m3uMirrorUrl, mirrorRegisterLink } = await import('../src/services/epg.js');
+  assert.match(m3uMirrorUrl('http://epg.example.com/epg.xml.gz'), /\/epg\/m3u\/[0-9a-z]+\.xml\.gz$/);
+  assert.equal(mirrorRegisterLink('http://x/y'), null); // only on <user>.github.io
+});

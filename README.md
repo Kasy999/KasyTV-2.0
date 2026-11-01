@@ -44,6 +44,17 @@ Jellyfin im Heimnetz (`http://192.168…:8096`), HTTP-Playlists und HTTP-Streams
 * für Playlists/Streams den eingebauten **Proxy** von `tools/serve.mjs` eintragen (siehe unten).
 
 
+### EPG aus der M3U
+
+Kasy TV lädt das EPG aus der Adresse im Kopf der M3U (`url-tvg`, `x-tvg-url`) bzw. aus der für die Quelle eingetragenen Adresse. Dafür probiert die App der Reihe nach:
+
+1. direkt,
+2. bei HTTP-Adressen die HTTPS-Variante,
+3. den eingetragenen CORS-Proxy,
+4. den Kasy-Spiegel dieser Adresse.
+
+Viele Anbieter sperren den Abruf durch Web-Apps (CORS). Dann zeigt Einstellungen → IPTV-Quellen den Knopf „Freischalten“: GitHub öffnet sich mit einer fertigen Datei in `epg-urls/`. Nach „Commit changes“ lädt der Workflow das EPG alle 6 Stunden nach `./epg/m3u/` (gleiche Herkunft wie die App, keine Sperre). Das freie Kasy-EPG (DE/AT/CH) ist nur noch Ersatz.
+
 ### Wiedergabe fortsetzen
 
 - Filme, Folgen und Archiv-Sendungen laufen dort weiter, wo sie aufgehört haben. Der Player blendet „Fortgesetzt bei … · Von vorn“ ein, außerdem gibt es „Von vorn beginnen“ unter Optionen.

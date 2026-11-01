@@ -78,11 +78,63 @@ function epgSection(render) {
   if (!src) return null;
   const status = h('p.form-status');
   const st = epg.epgStatus(src.id);
+  const host = (u) => {
+    try {
+      return new URL(u).hostname;
+    } catch {
+      return u;
+    }
+  };
+  const VIA = { mirror: ' (über Kasy-Spiegel)', proxy: ' (über Proxy)', https: ' (HTTPS)' };
   const describe = (d) =>
     `${d.channels}${d.total ? ' von ' + d.total : ''} Sendern mit Programm · ${d.count} Sendungen · Stand ${formatDate(d.updatedAt)}` +
-    (d.sources && d.sources.length ? ` · Quelle: ${d.sources.map((u) => (u.includes('/epg/') ? 'Kasy-EPG' : new URL(u).hostname)).join(', ')}` : '') +
-    (d.primaryFailed ? ` · Playlist-EPG nicht ladbar (${d.primaryFailed})` : '');
+    (d.sources && d.sources.length ? ` · Quelle: ${d.sources.map((u) => (u.includes('/epg/') && !(d.via && d.via[u]) ? 'freies Kasy-EPG' : host(u) + ((d.via && VIA[d.via[u]]) || ''))).join(', ')}` : '') +
+    (d.primaryFailed ? ` · Playlist-EPG gesperrt (${d.primaryFailed})` : '');
   if (st) status.textContent = describe(st);
+  else if (epg.epgError(src.id)) {
+    status.textContent = epg.epgError(src.id).message;
+    status.classList.add('error');
+  }
+
+  // EPG of the playlist (url-tvg): shows the address and – if the provider blocks web apps – the release button.
+  const m3uRow = h('div.epg-m3u');
+  epg.playlistEpgUrls(src.id).then((urls) => {
+    const blocked = new Set([...((st && st.blocked) || []), ...((epg.epgError(src.id) && epg.epgError(src.id).blocked) || [])]);
+    const rows = [];
+    if (!urls.length) rows.push(h('p.hint', 'Die Playlist enthält keine EPG-Adresse (url-tvg). Eine Adresse oben eintragen oder das freie Kasy-EPG nutzen.'));
+    for (const u of urls) {
+      const loaded = st && st.sources && st.sources.includes(u);
+      const link = epg.mirrorRegisterLink(u);
+      const desc = loaded
+        ? 'Wird geladen' + ((st.via && VIA[st.via[u]]) || ' (direkt)')
+        : blocked.has(u)
+          ? 'Der Anbieter sperrt den Abruf durch Web-Apps (CORS). Einmal freischalten: GitHub lädt das EPG dann alle 6 Stunden in den Kasy-Spiegel.'
+          : 'Noch nicht geladen';
+      const actions = [];
+      if (blocked.has(u) && link) {
+        actions.push(
+          button('Freischalten', async () => {
+            const secret = /token|pass|password|user(name)?=|key=|auth/i.test(u);
+            const ok = await confirmDialog(
+              'EPG der Playlist freischalten',
+              `GitHub öffnet sich mit der fertig ausgefüllten Datei für den Kasy-Spiegel. Dort nur „Commit changes“ drücken. Nach 2–3 Minuten ist das EPG verfügbar, danach hier „EPG jetzt laden“.\n\nAdresse: ${u}` +
+                (secret ? '\n\nAchtung: Die Adresse scheint Zugangsdaten zu enthalten – sie wäre im öffentlichen Repository sichtbar.' : '\n\nDie Adresse wird im öffentlichen Repository gespeichert.'),
+              { okLabel: 'Auf GitHub öffnen' },
+            );
+            if (ok) window.open(link, '_blank', 'noopener');
+          }, { variant: 'primary', icon: 'next' }),
+        );
+      }
+      rows.push(
+        h(
+          'div.set-row',
+          h('div.set-text', h('div.set-label', 'EPG der Playlist: ' + host(u)), h('div.set-desc', desc)),
+          actions.length ? h('div.set-control', actions) : null,
+        ),
+      );
+    }
+    m3uRow.replaceChildren(...rows);
+  });
   const arch = src.archive || { type: 'auto', days: 7 };
   const archType = h('button.select-btn', { type: 'button', data: { focus: true } });
   const ARCH = [
@@ -124,8 +176,9 @@ function epgSection(render) {
   });
   return section(
     'TV-Programm (EPG) & Archiv – ' + src.name,
-    h('div.set-row', h('div.set-text', h('div.set-label', 'EPG-Adresse'), h('div.set-desc', 'Programmdaten für Programmführer und Archiv')), h('div.set-control', urlBtn)),
-    selectRow('Freies Kasy-EPG', 'Wird genutzt, wenn die Playlist kein EPG hat oder der Anbieter den Abruf sperrt (CORS). Alle 6 Stunden aktualisiert.', 'iptv.epgMirror', [
+    h('div.set-row', h('div.set-text', h('div.set-label', 'EPG-Adresse'), h('div.set-desc', 'Leer = Adresse aus der M3U (url-tvg). Programmdaten für Programmführer und Archiv.')), h('div.set-control', urlBtn)),
+    m3uRow,
+    selectRow('Freies Kasy-EPG (Ersatz)', 'Nur wenn das EPG der Playlist fehlt, gesperrt ist oder kaum Sender trifft. Alle 6 Stunden aktualisiert.', 'iptv.epgMirror', [
       ...epg.MIRRORS,
       { value: 'off', label: 'Aus' },
     ], { onChange: () => epg.clearEpg(src.id).then(render) }),
@@ -144,6 +197,7 @@ function epgSection(render) {
         status.classList.add('error');
       } finally {
         off();
+        render(); // update the playlist-EPG rows (loaded / blocked)
       }
     }, { iconName: 'refresh' }),
     status,

@@ -430,3 +430,6 @@ textarea.input { min-height: 10rem; resize: vertical; line-height: 1.5; }
 
 .steps { margin: 0.25rem 0; padding-left: 1.25rem; color: var(--text-2); }
 .steps li { margin: 0.35rem 0; }
+
+.dialog-text { white-space: pre-line; overflow-wrap: anywhere; }
+.epg-m3u .set-control { flex-wrap: wrap; }
