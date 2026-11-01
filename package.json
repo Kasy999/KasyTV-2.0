@@ -11,7 +11,7 @@
     "preview": "vite preview --host",
     "serve": "node tools/serve.mjs dist",
     "serve:src": "node tools/serve.mjs .",
-    "test": "node --test tests/m3u-parser.test.mjs tests/segments.test.mjs tests/epg.test.mjs"
+    "test": "node --test tests/m3u-parser.test.mjs tests/segments.test.mjs tests/epg.test.mjs tests/mkv.test.mjs"
   },
   "dependencies": {
     "dashjs": "^4.7.4",

@@ -44,6 +44,7 @@ class Player {
       onLevels: () => {},
       onTracks: () => {},
       onFatal: (e) => this.showError(e.message),
+      onNotice: (msg) => toast(msg, { duration: 4500 }),
     });
     this.subs = new SubtitleRenderer(this.video, this.subLayer);
     this.applyAspect();
@@ -319,7 +320,7 @@ class Player {
     s.pb = pb;
     this.video.hidden = false;
     try {
-      await this.engine.load({ url: pb.url, type: pb.type === 'hls' ? 'hls' : 'file', live: false, startSeconds: pb.startSeconds });
+      await this.engine.load({ url: pb.url, type: pb.type === 'hls' ? 'hls' : pb.type === 'mkv' ? 'mkv' : 'file', live: false, startSeconds: pb.startSeconds, mkv: pb.mkv });
     } catch (e) {
       // Direct play failed (codec the browser can't decode after all) → ask the server to transcode.
       if (pb.method !== 'Transcode' && !opts.forceTranscode) {
@@ -855,7 +856,7 @@ class Player {
     const s = this.session;
     const v = this.video;
     const rows = [
-      ['Technik', this.yt ? 'YouTube IFrame' : this.engine.kind === 'hlsjs' ? 'hls.js (MSE)' : this.engine.kind === 'mpegts' ? 'mpegts.js (MSE)' : this.engine.kind === 'dash' ? 'dash.js (MSE)' : 'Nativ'],
+      ['Technik', this.yt ? 'YouTube IFrame' : this.engine.kind === 'hlsjs' ? 'hls.js (MSE)' : this.engine.kind === 'mpegts' ? 'mpegts.js (MSE)' : this.engine.kind === 'dash' ? 'dash.js (MSE)' : this.engine.kind === 'mkv' ? 'Kasy MKV-Decoder (MSE, ohne Umwandlung)' + (this.engine.extAudio ? ' · Ton vom Server' : '') : 'Nativ'],
       ['Auflösung', v.videoWidth ? `${v.videoWidth}×${v.videoHeight}` : '–'],
       ['Dauer', this.isVod() ? formatTime(this.duration()) : 'Live'],
     ];

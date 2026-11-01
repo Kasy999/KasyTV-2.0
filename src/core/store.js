@@ -55,6 +55,7 @@ export const DEFAULTS = {
   },
   player: {
     engine: 'auto', // auto | hlsjs | native
+    mkvDecoder: true, // Kasy MKV decoder: MKV without server conversion
     autoplayNext: true,
     resume: true,
     aspect: 'contain', // contain | cover | fill

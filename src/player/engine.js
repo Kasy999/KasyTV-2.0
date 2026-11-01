@@ -4,7 +4,9 @@
  *  - HLS (.m3u8): hls.js on MSE browsers (Chrome, Android TV/Xiaomi stick, Tizen, webOS, desktop), native HLS on
  *    iOS/Safari (also gives AirPlay & background audio). Configurable: auto | hls.js | nativ.
  *  - MPEG-TS (.ts, Xtream live without extension): mpegts.js, then native.
- *  - Files (mp4, webm, mkv, mp3 …): native.
+ *  - MKV (.mkv, Jellyfin direct play): Kasy MKV decoder (mkv/) – remuxes in the browser to fragmented MP4 for
+ *    Media Source Extensions, so the device's hardware decoder plays it without server conversion; then native.
+ *  - Files (mp4, webm, mp3 …): native.
  *  - Unknown URLs: tries HLS → MPEG-TS → native in turn (each attempt with a timeout).
 
  */
@@ -13,6 +15,9 @@ import { store } from '../core/store.js';
 import { perf } from '../core/performance.js';
 import { isIOS } from '../core/util.js';
 import { proxied } from '../services/net.js';
+import { isMixedContent } from '../core/util.js';
+import { MkvSource, mkvSupported } from './mkv/mkv-source.js';
+import { ExternalAudio } from './mkv/external-audio.js';
 
 const ATTEMPT_TIMEOUT = 15000;
 
@@ -21,6 +26,7 @@ export function detectType(url) {
   if (/\.m3u8$|\.m3u$/.test(u) || /\/(hls|manifest)(\.|\/)|\/playlist\.m3u|format=m3u8|type=m3u8/.test(String(url).toLowerCase())) return 'hls';
   if (/\.(ts|mts|m2ts)$/.test(u)) return 'mpegts';
   if (/\.mpd$/.test(u)) return 'dash';
+  if (/\.(mkv|mk3d|mka)$/.test(u)) return 'mkv';
   if (/\.(mp4|m4v|mov|webm|mkv|ogv|mp3|aac|m4a|ogg|oga|flac|wav|opus)$/.test(u)) return 'file';
   return 'unknown';
 }
@@ -34,9 +40,11 @@ function nativeHls(video) {
 }
 
 export class VideoEngine {
-  constructor(video, { onLevels, onTracks, onFatal } = {}) {
+  constructor(video, { onLevels, onTracks, onFatal, onNotice } = {}) {
     this.video = video;
-    this.cb = { onLevels, onTracks, onFatal };
+    this.cb = { onLevels, onTracks, onFatal, onNotice };
+    this.mkv = null;
+    this.extAudio = null;
     this.hls = null;
     this.mpegts = null;
     this.kind = null; // 'hlsjs' | 'mpegts' | 'dash' | 'native'
@@ -62,6 +70,8 @@ export class VideoEngine {
         return mse ? ['mpegts', 'native'] : ['native'];
       case 'file':
         return ['native'];
+      case 'mkv':
+        return mkvSupported() && store.get('player.mkvDecoder') !== false ? ['mkv', 'native'] : ['native'];
       case 'dash':
         return mse ? ['dash'] : [];
       default:
@@ -75,23 +85,35 @@ export class VideoEngine {
   async load(src) {
     const token = ++this.token;
     let url = src.url;
-    if (store.get('iptv.proxyStreams') && src.allowProxy) url = proxied(url) || url;
     const type = src.type && src.type !== 'auto' ? src.type : detectType(src.url);
     const list = this.candidates(type);
+    // HTTP address in the HTTPS app: the browser blocks it. Use the proxy if there is one, otherwise try the
+    // same address over HTTPS (many providers offer both).
+    const urls = [];
+    const proxy = src.allowProxy ? proxied(url) : null;
+    if (proxy && (store.get('iptv.proxyStreams') || isMixedContent(url))) urls.push(proxy);
+    else if (isMixedContent(url)) urls.push(url.replace(/^http:/i, 'https:'));
+    else urls.push(url);
     let lastError = null;
-    for (const kind of list) {
-      if (token !== this.token) throw new Error('abgebrochen');
-      this.teardown();
-      try {
-        await this.attempt(kind, url, src, token);
-        this.kind = kind;
-        return kind;
-      } catch (e) {
-        lastError = e;
-        console.warn(`[engine] ${kind} fehlgeschlagen:`, e && e.message);
+    for (const u of urls) {
+      for (const kind of list) {
+        if (token !== this.token) throw new Error('abgebrochen');
+        this.teardown();
+        try {
+          await this.attempt(kind, u, src, token);
+          this.kind = kind;
+          this.src = { ...src, url: src.url };
+          return kind;
+        } catch (e) {
+          lastError = e;
+          console.warn(`[engine] ${kind} fehlgeschlagen:`, e && e.message);
+        }
       }
     }
     this.teardown();
+    if (isMixedContent(url) && !proxy) {
+      throw new Error('Die Adresse ist HTTP, die App läuft über HTTPS – der Browser blockiert das. Auch per HTTPS war die Adresse nicht erreichbar. Abhilfe: Stream-Proxy unter Einstellungen → IPTV eintragen oder die App im Heimnetz per HTTP öffnen (node tools/serve.mjs).');
+    }
     throw lastError || new Error('Stream kann nicht abgespielt werden');
   }
 
@@ -126,6 +148,10 @@ export class VideoEngine {
       if (kind === 'native') {
         v.src = url;
         v.load();
+        return;
+      }
+      if (kind === 'mkv') {
+        this.startMkv(url, src, token, done);
         return;
       }
       if (kind === 'hlsjs') {
@@ -190,6 +216,51 @@ export class VideoEngine {
           .catch((e) => done(e));
       }
     });
+  }
+
+  startMkv(url, src, token, done, audioTrack) {
+    const opt = src.mkv || {};
+    const m = new MkvSource(this.video, {
+      url,
+      size: opt.size,
+      durationSeconds: opt.durationSeconds,
+      audioTrack: audioTrack !== undefined ? audioTrack : opt.audioTrack,
+      preferLanguage: opt.preferLanguage,
+      maxAheadSeconds: perf.low ? 30 : Math.max(45, store.get('player.bufferSeconds') || 30),
+      onFatal: (e) => {
+        if (this.mkv !== m) return;
+        if (this.video.readyState < 1) done(e);
+        else if (this.cb.onFatal) this.cb.onFatal(e);
+      },
+      onTracks: () => this.cb.onTracks && this.cb.onTracks(),
+      onMissingAudio: () => this.handleMissingAudio(m, src),
+    });
+    this.mkv = m;
+    m.open()
+      .then(() => {
+        if (this.mkv !== m || token !== this.token) return m.destroy();
+        if (m.missingAudio) this.handleMissingAudio(m, src);
+      })
+      .catch((e) => {
+        if (this.mkv === m) done(e);
+      });
+  }
+
+  /** The chosen sound track can't be decoded by the browser → sound converted by the server, picture direct. */
+  handleMissingAudio(m, src) {
+    if (this.mkv !== m || this.extAudio || !m.missingAudio) return;
+    const opt = src.mkv || {};
+    const codec = m.missingAudio.codec;
+    if (opt.externalAudio) {
+      const index = m.missingAudio.index;
+      this.extAudio = new ExternalAudio(this.video, (t) => opt.externalAudio(t, index), {
+        shiftSeconds: (m.shiftNs || 0) / 1e9,
+        onError: (e) => this.cb.onNotice && this.cb.onNotice(e.message),
+      });
+      if (this.cb.onNotice) this.cb.onNotice(`Bild direkt · Ton (${codec}) wandelt der Server um`);
+    } else if (this.cb.onNotice) {
+      this.cb.onNotice(`Tonformat ${codec} wird von diesem Gerät nicht unterstützt – andere Tonspur wählen`);
+    }
   }
 
   startHls(Hls, url, src, done) {
@@ -281,6 +352,10 @@ export class VideoEngine {
   }
 
   audioTracks() {
+    if (this.mkv && this.mkv.audioTracks.length > 1) {
+      const sel = this.mkv.selectedAudio;
+      return this.mkv.audioTracks.map((a) => ({ id: a.index, label: a.label + (a.supported ? '' : ' (Ton vom Server)'), lang: a.lang, active: sel ? sel.index === a.index : false }));
+    }
     if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length > 1) {
       return this.hls.audioTracks.map((t, i) => ({ id: i, label: t.name || t.lang || 'Audio ' + (i + 1), lang: t.lang, active: i === this.hls.audioTrack }));
     }
@@ -292,6 +367,16 @@ export class VideoEngine {
   }
 
   setAudioTrack(id) {
+    if (this.mkv) {
+      // Different sound track → restart the decoder at the same position with the new track.
+      const t = this.video.currentTime;
+      const wasPaused = this.video.paused;
+      const src = { ...this.src, startSeconds: t, mkv: { ...(this.src.mkv || {}), audioTrack: id } };
+      this.load(src)
+        .then(() => !wasPaused && this.video.play().catch(() => {}))
+        .catch((e) => this.cb.onFatal && this.cb.onFatal(e));
+      return;
+    }
     if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length > 1) {
       this.hls.audioTrack = id;
       return;
@@ -315,6 +400,14 @@ export class VideoEngine {
   }
 
   teardown() {
+    if (this.extAudio) {
+      this.extAudio.destroy();
+      this.extAudio = null;
+    }
+    if (this.mkv) {
+      this.mkv.destroy();
+      this.mkv = null;
+    }
     if (this.hls) {
       try {
         this.hls.destroy();

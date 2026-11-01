@@ -322,6 +322,11 @@ const BUILDERS = {
         ]),
         selectRow('Puffer', 'Größerer Puffer = weniger Ruckler, mehr Speicher', 'player.bufferSeconds', [10, 20, 30, 60, 90].map((s) => ({ value: s, label: s + ' Sekunden' }))),
         toggleRow('Niedrige Latenz bei Live', 'Bleibt näher am Live-Signal (kann bei schwachem Netz ruckeln).', 'player.lowLatencyLive'),
+        toggleRow(
+          'MKV-Decoder (ohne Umwandlung)',
+          'Spielt MKV-Filme und -Serien von Jellyfin direkt: Die Datei wird im Browser umverpackt und vom Hardware-Decoder des Geräts abgespielt – der Server muss nichts umwandeln. Bei Tonformaten wie DTS oder TrueHD wandelt der Server nur den Ton um.',
+          'player.mkvDecoder',
+        ),
       ),
       section(
         'Verhalten',
@@ -334,7 +339,7 @@ const BUILDERS = {
         ]),
         stepperRow('Sprungweite', '◀ ▶ auf der Fernbedienung, Doppeltipp am Rand', 'player.seekStep', { min: 5, max: 60, step: 5, format: (v) => v + ' s' }),
         stepperRow('Bedienleiste ausblenden nach', null, 'player.osdTimeout', { min: 2, max: 15, step: 1, format: (v) => v + ' s' }),
-      ),,
+      ),
       section(
         'Intro & Abspann (Jellyfin)',
         h('p.hint', 'Nutzt die Segmente von Jellyfin 10.10 (Media Segments) bzw. des Intro-Skipper-Plugins.'),

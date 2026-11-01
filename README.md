@@ -43,6 +43,19 @@ Jellyfin im Heimnetz (`http://192.168…:8096`), HTTP-Playlists und HTTP-Streams
   Offline-Start, oder
 * für Playlists/Streams den eingebauten **Proxy** von `tools/serve.mjs` eintragen (siehe unten).
 
+
+### MKV-Decoder (ohne Umwandlung)
+
+MKV-Filme und -Serien von Jellyfin (und `.mkv`-Links in Playlists) spielt Kasy TV direkt ab, ohne dass der Server etwas umwandelt:
+
+- `src/player/mkv/demuxer.js`: Ein Matroska-Demuxer liest die Datei während des Downloads. Er versteht SeekHead, Cues, Lacing, Header-Stripping und Cluster unbekannter Größe.
+- `src/player/mkv/mp4.js`: Die Frames werden unverändert in fragmentiertes MP4 umverpackt.
+- `src/player/mkv/mkv-source.js`: Über Media Source Extensions dekodiert der Hardware-Decoder des Geräts. Spulen läuft über den Cues-Index oder, ohne Index, über einen Positions-Sprung mit Nachsuchen.
+- **Bild:** H.264, H.265/HEVC (wo das Gerät es kann), AV1, VP9.
+- **Ton:** AAC, Opus, FLAC, AC-3, E-AC-3 und MP3, soweit der Browser sie kann.
+- `src/player/mkv/external-audio.js`: Für DTS, TrueHD & Co. wandelt Jellyfin nur den Ton um (MP3 Stereo, synchron gehalten), das Bild bleibt direkt.
+- Abschaltbar unter Einstellungen → Player → „MKV-Decoder“.
+
 ## Xiaomi TV Stick 4K / Android TV / Smart-TVs
 
 * Xiaomi-Stick: einen Browser mit Fernbedienungs-Unterstützung installieren (z. B. *TV Bro*) und die App-Adresse

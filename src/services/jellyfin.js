@@ -229,6 +229,26 @@ function probe(type) {
   }
 }
 
+function mseProbe(type) {
+  const MS = window.ManagedMediaSource || window.MediaSource || window.WebKitMediaSource;
+  try {
+    return !!(MS && MS.isTypeSupported(type));
+  } catch {
+    return false;
+  }
+}
+
+/** Video codecs the MKV decoder can hand to this device's decoder (null = decoder off / no MSE). */
+export function mkvDecoderCodecs() {
+  if (store.get('player.mkvDecoder') === false) return null;
+  const list = [];
+  if (mseProbe('video/mp4; codecs="avc1.640029"')) list.push('h264');
+  if (mseProbe('video/mp4; codecs="hvc1.1.6.L120.90"') || mseProbe('video/mp4; codecs="hev1.1.6.L120.90"')) list.push('hevc');
+  if (mseProbe('video/mp4; codecs="av01.0.08M.08"')) list.push('av1');
+  if (mseProbe('video/mp4; codecs="vp09.00.40.08"')) list.push('vp9');
+  return list.length ? list.join(',') : null;
+}
+
 /** Device profile from what this browser really decodes (so Jellyfin only transcodes when needed). */
 export function deviceProfile() {
   const nativeHls = probe('application/vnd.apple.mpegurl');
@@ -250,7 +270,12 @@ export function deviceProfile() {
     { Container: 'mp3', Type: 'Audio' },
     { Container: 'aac,m4a', Type: 'Audio' },
   ];
-  if (mkv && h264) direct.push({ Container: 'mkv', Type: 'Video', VideoCodec: vCodecs, AudioCodec: aCodecs });
+  const mkvDecoder = mkvDecoderCodecs();
+  if (mkvDecoder) {
+    // Kasy MKV decoder: MKV plays directly whenever the picture can be decoded here. Sound formats the browser
+    // can't decode (DTS, TrueHD …) are converted on their own by the server – the video stays untouched.
+    direct.push({ Container: 'mkv,webm', Type: 'Video', VideoCodec: mkvDecoder });
+  } else if (mkv && h264) direct.push({ Container: 'mkv', Type: 'Video', VideoCodec: vCodecs, AudioCodec: aCodecs });
 
   return {
     Name: 'Kasy TV PWA',
@@ -324,6 +349,7 @@ export async function getPlayback(it, { startMs = null, audioIndex, subtitleInde
     url = `${c.server}/Videos/${it.Id}/stream${src.Container ? '.' + src.Container.split(',')[0] : ''}?${q}`;
     type = 'file';
     method = 'DirectPlay';
+    if (/mkv|matroska/i.test(src.Container || '') && mkvDecoderCodecs()) type = 'mkv';
   } else if (src.TranscodingUrl) {
     url = c.server + src.TranscodingUrl;
     if (!/api_key=/.test(url)) url += (url.includes('?') ? '&' : '?') + 'api_key=' + c.token;
@@ -359,14 +385,42 @@ export async function getPlayback(it, { startMs = null, audioIndex, subtitleInde
         burnedNow: s.DeliveryMethod === 'Encode',
       };
     });
-  const audioTracks = streams
-    .filter((s) => s.Type === 'Audio')
+  const audioStreams = streams.filter((s) => s.Type === 'Audio');
+  const chosenAudio = audioIndex !== undefined ? audioIndex : src.DefaultAudioStreamIndex;
+  let mkv = null;
+  if (type === 'mkv') {
+    const pos = audioStreams.findIndex((s) => s.Index === chosenAudio);
+    mkv = {
+      size: src.Size || 0,
+      durationSeconds: src.RunTimeTicks ? src.RunTimeTicks / TICKS / 1000 : 0,
+      audioTrack: pos >= 0 ? pos : undefined,
+      // Sound only, converted by the server (for DTS/TrueHD … the browser can't decode).
+      externalAudio: (seconds, trackPos) => {
+        const stream = audioStreams[trackPos];
+        const q = new URLSearchParams({
+          api_key: c.token,
+          deviceId: c.deviceId,
+          mediaSourceId: src.Id,
+          playSessionId: info.PlaySessionId || '',
+          audioCodec: 'mp3',
+          audioBitRate: '192000',
+          maxAudioChannels: '2',
+          static: 'false',
+          startTimeTicks: String(Math.floor(seconds * 1000 * TICKS)),
+        });
+        if (stream) q.set('audioStreamIndex', String(stream.Index));
+        return `${c.server}/Audio/${it.Id}/stream.mp3?${q}`;
+      },
+    };
+  }
+  const audioTracks = audioStreams
     .map((s) => ({ index: s.Index, label: s.DisplayTitle || s.Language || 'Audio ' + s.Index, lang: s.Language || '', isDefault: s.Index === src.DefaultAudioStreamIndex }));
 
   return {
     url,
     type,
     method,
+    mkv,
     // Jellyfin's HLS playlists cover the whole runtime, so the player seeks in both cases.
     startSeconds: startMs ? startMs / 1000 : 0,
     subtitles,
