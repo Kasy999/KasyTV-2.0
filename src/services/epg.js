@@ -64,8 +64,8 @@ export const MIRRORS = [
   { value: 'at', label: 'Österreich' },
   { value: 'ch', label: 'Schweiz' },
   { value: 'ru', label: 'Russland (iptvx.one)', description: 'Russische Sender, kompakt (~14 MB)' },
-  { value: 'ru2', label: 'Russland (it999 / Edem)', description: 'Sehr vollständig (~40 MB), u. a. für Edem/iLook' },
-  { value: 'ru3', label: 'Russland (epg.one)', description: 'Sehr vollständig (~40 MB), u. a. für Antifriz/Ottclub' },
+  { value: 'ru2', label: 'Russland (it999 / Edem)', description: 'Sehr vollständig (~40 MB)' },
+  { value: 'ru3', label: 'Russland (epg.one)', description: 'Sehr vollständig (~40 MB), Alternative' },
   { value: 'ru,ru2,ru3', label: 'Russland – alle Quellen', description: 'Nacheinander, nur solange Sender ohne Programm übrig sind' },
   { value: 'ru,de', label: 'Russland + Deutschland', description: 'Gemischte Playlists' },
 ];
