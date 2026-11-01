@@ -51,14 +51,6 @@
         "https://epg.one/epg2.xml.gz",
         "http://epg.one/epg.xml.gz"
       ]
-    },
-    {
-      "id": "ru4",
-      "label": "Russland (epgshare01)",
-      "urls": [
-        "https://epgshare01.online/epgshare01/epg_ripper_RU1.xml.gz",
-        "https://epgshare01.online/epgshare01/epg_ripper_RU2.xml.gz"
-      ]
     }
   ]
 }

@@ -63,11 +63,10 @@ export const MIRRORS = [
   { value: 'de', label: 'Deutschland' },
   { value: 'at', label: 'Österreich' },
   { value: 'ch', label: 'Schweiz' },
-  { value: 'ru', label: 'Russland (iptvx.one)', description: 'Russische Sender, kompakte Fassung' },
-  { value: 'ru2', label: 'Russland (it999 / Edem)', description: 'Alternative für russische Sender' },
-  { value: 'ru3', label: 'Russland (epg.one)', description: 'Alternative für russische Sender' },
-  { value: 'ru4', label: 'Russland (epgshare01)', description: 'Alternative für russische Sender' },
-  { value: 'ru,ru2,ru3', label: 'Russland – alle Quellen', description: 'Nacheinander, bis die Sender abgedeckt sind' },
+  { value: 'ru', label: 'Russland (iptvx.one)', description: 'Russische Sender, kompakt (~14 MB)' },
+  { value: 'ru2', label: 'Russland (it999 / Edem)', description: 'Sehr vollständig (~40 MB), u. a. für Edem/iLook' },
+  { value: 'ru3', label: 'Russland (epg.one)', description: 'Sehr vollständig (~40 MB), u. a. für Antifriz/Ottclub' },
+  { value: 'ru,ru2,ru3', label: 'Russland – alle Quellen', description: 'Nacheinander, nur solange Sender ohne Programm übrig sind' },
   { value: 'ru,de', label: 'Russland + Deutschland', description: 'Gemischte Playlists' },
 ];
 export function mirrorUrl(id) {
@@ -401,8 +400,14 @@ export async function refreshEpg(sourceId) {
     await tryUrls(primary, { mirror: true });
     // Provider EPG missing or blocked (CORS) → free mirrored EPG; also when it matched almost no channel.
     let primaryFailed = primary.length > 0 && !used.length;
+    // Free mirrored EPG: when the playlist EPG is missing / blocked / matches little. Several mirrors one after
+    // another, but only as long as channels are still without programme (they can be large).
+    const coverage = () => Object.keys(parser.programs).length / Math.max(1, playlist.channels.length);
     if (mirrors.length && (!used.length || Object.keys(parser.programs).length < Math.min(5, playlist.channels.length))) {
-      await tryUrls(mirrors.filter((m) => !used.includes(m)));
+      for (const m of mirrors.filter((x) => !used.includes(x))) {
+        await tryUrls([m]);
+        if (coverage() >= 0.9) break;
+      }
     }
     if (!used.length && blocked.length) {
       const err = new Error(`Das EPG der Playlist (${hostOf(blocked[0])}) sperrt Web-Apps (CORS). Unter Einstellungen → IPTV-Quellen → „EPG der Playlist freischalten“ einmalig für den Kasy-Spiegel freigeben.`);
