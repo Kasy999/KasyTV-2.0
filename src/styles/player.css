@@ -123,6 +123,10 @@
   box-shadow: var(--shadow);
 }
 .player-skip.show { display: inline-flex; }
+/* "Resumed at … · from the start" – bottom left, a less prominent look than "skip intro" */
+.player-restart { right: auto; left: calc(var(--safe-left) + 2rem); background: rgba(11, 14, 20, 0.85); color: #fff; font-weight: 600; border: 1px solid rgba(255, 255, 255, 0.18); }
+.player-restart:focus-visible, .player-restart.focused { outline: 3px solid var(--accent); }
+@media (max-width: 640px) { .player-restart { left: calc(var(--safe-left) + 0.75rem); bottom: 7.5rem; font-size: 0.9rem; padding: 0.7rem 1rem; } }
 
 .player-error, .player-next { position: absolute; inset: 0; z-index: 9; display: none; place-items: center; background: rgba(0, 0, 0, 0.75); padding: 1rem; }
 .player-error.show { display: grid; }

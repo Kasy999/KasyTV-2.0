@@ -218,3 +218,9 @@ html.lampa-open.mode-tv .nav-clock { font-size: 0.8rem; padding-left: 0.4rem; pa
   html.lampa-open .nav .nav-brand span { opacity: 0 !important; }
   html.lampa-open .nav-clock { font-size: 0.8rem; padding-left: 0.4rem; padding-right: 0; }
 }
+
+/* HOME: "Fortsetzen" next to the greeting */
+.view-head.hero { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.hero-continue:empty { display: none; }
+.hero-continue-btn { max-width: min(28rem, 100%); }
+.hero-continue-btn .btn-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

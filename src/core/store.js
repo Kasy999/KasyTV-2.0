@@ -60,6 +60,8 @@ export const DEFAULTS = {
     upNextSeconds: 30, // show "next episode" this long before the end (or at the credits)
     nextCountdown: 10, // seconds until the next episode starts by itself
     resume: true,
+    resumeMode: 'auto', // auto = continue right away | ask = ask first
+    resumeOnStart: false, // continue the last playback when the app starts
     aspect: 'contain', // contain | cover | fill
     bufferSeconds: 30,
     volume: 1,

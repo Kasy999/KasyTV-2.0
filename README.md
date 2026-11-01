@@ -44,6 +44,14 @@ Jellyfin im Heimnetz (`http://192.168…:8096`), HTTP-Playlists und HTTP-Streams
 * für Playlists/Streams den eingebauten **Proxy** von `tools/serve.mjs` eintragen (siehe unten).
 
 
+### Wiedergabe fortsetzen
+
+- Filme, Folgen und Archiv-Sendungen laufen dort weiter, wo sie aufgehört haben. Der Player blendet „Fortgesetzt bei … · Von vorn“ ein, außerdem gibt es „Von vorn beginnen“ unter Optionen.
+- Die Position wird alle 10 s gespeichert, beim Pausieren, Schließen und wenn die App in den Hintergrund geht (TV aus, App-Wechsel).
+- Jellyfin: Die Position kommt frisch vom Server (gilt auch geräteübergreifend). Eine lokale Kopie springt ein, falls der Server die letzte Meldung nicht mehr bekam.
+- Startseite: Knopf „Fortsetzen: …“ für die letzte Wiedergabe (auch Live-Sender). „Weiterschauen“ zeigt Jellyfin und Playlist-Filme gemeinsam, langes Drücken entfernt einen Eintrag.
+- Einstellungen → Player: direkt fortsetzen oder vorher fragen, optional beim App-Start sofort fortsetzen.
+
 ### Nächste Folge
 
 - Im Player erscheinen bei Serienfolgen (Jellyfin) und bei Filmen/Folgen aus derselben Gruppe einer VOD-Playlist die Knöpfe „Vorherige Folge“ und „Nächste Folge“.

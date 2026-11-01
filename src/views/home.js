@@ -7,7 +7,10 @@ import { preserveFocus } from '../core/focus.js';
 import { row, posterCard, channelCard, actionCard } from '../components/cards.js';
 import * as iptv from '../services/iptv.js';
 import * as jf from '../services/jellyfin.js';
-import { playChannel, playJellyfin } from '../player/player.js';
+import { playChannel, playJellyfin, continuePlayback } from '../player/player.js';
+import { getLast, listResume, removeResume } from '../services/resume.js';
+import { toast } from '../components/toast.js';
+import { formatTime } from '../core/util.js';
 import { channelContextMenu } from './live.js';
 
 function greeting() {
@@ -22,7 +25,24 @@ function greeting() {
 export async function homeView(el) {
   const rows = h('div.rows');
   const name = store.get('jellyfin.userName');
-  el.append(h('header.view-head.hero', h('div', h('h1', greeting() + (name ? ', ' + name : '')), h('p.muted', 'Live-TV, Videothek und Lampa an einem Ort.'))), rows);
+  const continueBox = h('div.hero-continue');
+  el.append(h('header.view-head.hero', h('div', h('h1', greeting() + (name ? ', ' + name : '')), h('p.muted', 'Live-TV, Videothek und Lampa an einem Ort.')), continueBox), rows);
+
+  // "Fortsetzen": the last playback with one tap (or OK on the remote).
+  const play = (e) => continuePlayback(e).catch((err) => toast(err.message, { kind: 'error' }));
+  getLast().then((last) => {
+    if (!last || Date.now() - last.at > 14 * 864e5 || !store.get('player.resume')) return;
+    if (last.kind === 'jellyfin' && !jf.isConnected()) return;
+    const what = last.kind === 'channel' && last.live ? 'Weiter mit' : 'Fortsetzen';
+    continueBox.replaceChildren(
+      h(
+        'button.btn.primary.hero-continue-btn',
+        { type: 'button', data: { focus: true }, onClick: () => play(last), title: [last.title, last.subtitle].filter(Boolean).join(' · ') },
+        icon('play'),
+        h('span.btn-label', `${what}: ${last.title || 'Letzte Wiedergabe'}`),
+      ),
+    );
+  });
 
   let alive = true;
   const render = async () => {
@@ -44,24 +64,39 @@ export async function homeView(el) {
         parts.push(h('p.notice', icon('info'), 'Jellyfin: ' + e.message));
       }
     }
-    if (resumeItems.length) {
-      parts.push(
-        row(
-          'Weiterschauen',
-          resumeItems.map((it) =>
-            posterCard({
-              title: it.SeriesName || it.Name,
-              subtitle: it.SeriesName ? `S${it.ParentIndexNumber}E${it.IndexNumber} · ${it.Name}` : it.ProductionYear,
-              image: jf.thumbUrl(it),
-              wide: true,
-              progress: it.UserData && it.UserData.PlayedPercentage ? it.UserData.PlayedPercentage / 100 : 0,
-              onClick: () => playJellyfin(it),
-              onLongPress: () => navigate('/library/item/' + it.Id),
-            }),
-          ),
-        ),
-      );
-    }
+    // Continue watching: Jellyfin (server) + films / episodes / archive programmes from playlists (local).
+    const localResume = cfg.homeRows.continue && store.get('player.resume') ? await listResume(16).catch(() => []) : [];
+    const resumeCards = [
+      ...resumeItems.map((it) => ({
+        at: it.UserData && it.UserData.LastPlayedDate ? Date.parse(it.UserData.LastPlayedDate) : 0,
+        card: posterCard({
+          title: it.SeriesName || it.Name,
+          subtitle: it.SeriesName ? `S${it.ParentIndexNumber}E${it.IndexNumber} · ${it.Name}` : it.ProductionYear,
+          image: jf.thumbUrl(it),
+          wide: true,
+          progress: it.UserData && it.UserData.PlayedPercentage ? it.UserData.PlayedPercentage / 100 : 0,
+          onClick: () => playJellyfin(it),
+          onLongPress: () => navigate('/library/item/' + it.Id),
+        }),
+      })),
+      ...localResume.map((e) => ({
+        at: e.at,
+        card: posterCard({
+          title: e.title,
+          subtitle: [e.subtitle, 'noch ' + formatTime(Math.max(0, e.duration - e.pos))].filter(Boolean).join(' · '),
+          image: e.image,
+          wide: true,
+          progress: e.duration ? e.pos / e.duration : 0,
+          onClick: () => play(e),
+          onLongPress: async () => {
+            await removeResume(e.url);
+            toast('Aus „Weiterschauen“ entfernt');
+            render();
+          },
+        }),
+      })),
+    ].sort((a, b) => b.at - a.at);
+    if (resumeCards.length) parts.push(row('Weiterschauen', resumeCards.map((x) => x.card)));
 
     // IPTV
     if (cfg.modules.live && sources.length) {

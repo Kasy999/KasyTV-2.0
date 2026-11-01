@@ -330,7 +330,12 @@ const BUILDERS = {
       ),
       section(
         'Verhalten',
-        toggleRow('Wiedergabe fortsetzen', 'Filme und Folgen an der letzten Stelle fortsetzen', 'player.resume'),
+        toggleRow('Wiedergabe fortsetzen', 'Filme, Folgen und Archiv-Sendungen an der Stelle fortsetzen, an der sie aufgehört haben – auch geräteübergreifend über Jellyfin.', 'player.resume'),
+        selectRow('Beim Öffnen', null, 'player.resumeMode', [
+          { value: 'auto', label: 'Direkt fortsetzen (mit „Von vorn“-Knopf)' },
+          { value: 'ask', label: 'Fragen: fortsetzen oder von vorn' },
+        ]),
+        toggleRow('Beim App-Start fortsetzen', 'Startet beim Öffnen der App direkt die letzte Wiedergabe (Sender, Film oder Folge).', 'player.resumeOnStart'),
         toggleRow('Nächste Folge automatisch', 'Spielt die nächste Folge nach einem Countdown von selbst ab.', 'player.autoplayNext'),
         stepperRow('„Nächste Folge“ einblenden', 'So lange vor dem Ende – beim Abspann (Jellyfin-Segmente) schon dort', 'player.upNextSeconds', { min: 10, max: 180, step: 10, format: (v) => v + ' s vor Ende' }),
         stepperRow('Countdown bis zur nächsten Folge', null, 'player.nextCountdown', { min: 3, max: 30, step: 1, format: (v) => v + ' s' }),

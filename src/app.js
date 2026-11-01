@@ -115,6 +115,17 @@ export function mountApp(root) {
   const start = store.get('ui.startView') || 'home';
   router.start(outlet, '/' + start);
 
+  // "Beim App-Start fortsetzen": the last channel / film / episode starts right away.
+  if (store.get('player.resumeOnStart') && store.get('player.resume')) {
+    Promise.all([import('./services/resume.js'), import('./player/player.js')])
+      .then(async ([resume, player]) => {
+        const last = await resume.getLast();
+        if (!last || Date.now() - last.at > 7 * 864e5) return;
+        await player.continuePlayback(last);
+      })
+      .catch((e) => console.info('[resume] Fortsetzen beim Start nicht möglich:', e.message));
+  }
+
   return { banner };
 }
 

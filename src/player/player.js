@@ -24,7 +24,7 @@ import * as iptv from '../services/iptv.js';
 import * as epg from '../services/epg.js';
 import { navigate } from '../core/router.js';
 import * as jf from '../services/jellyfin.js';
-import { getResume, saveResume } from '../services/resume.js';
+import { getResumeEntry, saveResume, flushResume, setLast, removeResume } from '../services/resume.js';
 import { COLORS, FONTS } from '../services/text-style.js';
 
 let instance = null;
@@ -59,6 +59,7 @@ class Player {
     this.zap = h('div.player-zap');
     this.seekHint = h('div.seek-hint');
     this.skipBtn = h('button.player-skip', { type: 'button', data: { focus: true }, onClick: () => this.skipper && this.skipper.skip() });
+    this.restartBtn = h('button.player-skip.player-restart', { type: 'button', data: { focus: true }, onClick: () => this.restartFromBeginning() });
     this.errorBox = h('div.player-error');
     this.nextCard = h('div.player-next');
 
@@ -142,6 +143,7 @@ class Player {
       this.seekHint,
       this.osd,
       this.skipBtn,
+      this.restartBtn,
       this.nextCard,
       this.errorBox,
       this.panel,
@@ -171,6 +173,15 @@ class Player {
       this.dismiss = openOverlay('player', () => this.teardown());
       window.addEventListener('keydown', this.onKeyCapture, true);
       this.offRemote = bus.on('remote', this.onRemote);
+      if (!this.onHiddenBound) {
+        this.onHiddenBound = () => document.visibilityState === 'hidden' && this.onHidden();
+        document.addEventListener('visibilitychange', this.onHiddenBound);
+        window.addEventListener('pagehide', () => {
+          this.onHidden();
+          const s = this.session;
+          if (s && s.kind === 'jellyfin' && s.pb) jf.reportStopped(s.item, s.pb, this.time());
+        });
+      }
       this.clockTimer = setInterval(() => this.updateClock(), 15000);
       this.updateClock();
       this.root.focus({ preventScroll: true });
@@ -255,6 +266,8 @@ class Player {
   async start() {
     const s = this.session;
     const token = (this.loadToken = (this.loadToken || 0) + 1);
+    this.resumedAt = 0;
+    this.hideRestart();
     this.errorBox.classList.remove('show');
     this.spinner.classList.add('show');
     this.updateHeader();
@@ -270,6 +283,8 @@ class Player {
       this.setupMediaSession();
       await this.safePlay();
       this.updateUi();
+      this.rememberLast(s);
+      if (this.resumedAt > 5) this.showRestart(this.resumedAt);
     } catch (e) {
       if (token !== this.loadToken) return;
       console.error('[player]', e);
@@ -306,17 +321,30 @@ class Player {
         return;
       }
     }
-    if (!live && store.get('player.resume')) startSeconds = await getResume(url);
     this.currentUrl = url;
+    if (!live && store.get('player.resume')) {
+      const e = await getResumeEntry(this.resumeId());
+      if (e && e.pos > 5) startSeconds = await this.decideResume(e.pos, token);
+      if (token !== this.loadToken) return;
+    }
+    this.resumedAt = startSeconds;
     this.video.hidden = false;
     await this.engine.load({ url, type, live, startSeconds, allowProxy: true });
-    if (startSeconds > 5) toast('Fortgesetzt bei ' + formatTime(startSeconds));
     // A plain direct link with ad markers etc. – skipper for nothing; keep structure uniform.
     this.skipper = new SegmentSkipper(this.adapter(), (ui) => this.onSkipUi(ui));
   }
 
   async startJellyfin(s, token, opts = {}) {
-    const startMs = opts.startMs !== undefined ? opts.startMs : s.startMs;
+    let startMs = opts.startMs !== undefined ? opts.startMs : s.startMs;
+    if (startMs === undefined || startMs === null) {
+      // Opened without a position: continue where it stopped (server position, local copy as fallback).
+      const pos = await this.jellyfinResumePosition(s.item);
+      if (token !== this.loadToken) return;
+      startMs = pos > 5 ? (await this.decideResume(pos, token)) * 1000 : 0;
+      if (token !== this.loadToken) return;
+      s.startMs = startMs;
+      this.resumedAt = startMs / 1000;
+    }
     const pb = await jf.getPlayback(s.item, { startMs, audioIndex: opts.audioIndex, subtitleIndex: opts.subtitleIndex, forceTranscode: opts.forceTranscode });
     if (token !== this.loadToken) return;
     s.pb = pb;
@@ -407,6 +435,7 @@ class Player {
     on('timeupdate', () => {
       this.updateProgress();
       this.checkUpNext();
+      if (!this.media.paused && Date.now() - (this.lastSaved || 0) > 10000) this.savePosition();
     });
     on('durationchange', () => this.updateUi());
     on('progress', () => this.updateProgress());
@@ -452,6 +481,8 @@ class Player {
   async onEnded() {
     const s = this.session;
     if (!s) return;
+    const rid = this.resumeId();
+    if (rid && this.isVod()) removeResume(rid).catch(() => {});
     if (this.adjacent && this.adjacent.next) {
       // Ran into the end: autoplay → straight on, unless the credits were watched on purpose (then a short countdown).
       const auto = store.get('player.autoplayNext');
@@ -518,7 +549,7 @@ class Player {
     if (a.channelIndex !== undefined && s.kind === 'channel') {
       s.index = a.channelIndex;
       this.stopCurrent().then(() => this.start());
-    } else this.open({ kind: 'jellyfin', item: a, startMs: 0 });
+    } else this.open({ kind: 'jellyfin', item: a }); // a half-watched next episode continues too
     return true;
   }
 
@@ -591,10 +622,104 @@ class Player {
     if (hadFocus) this.root.focus({ preventScroll: true });
   }
 
+  /** Key under which the position of the current video is stored. */
+  resumeId() {
+    const s = this.session;
+    if (!s) return null;
+    if (s.kind === 'jellyfin') return 'jf:' + s.item.Id;
+    return s.resumeId || this.currentUrl || s.url || null;
+  }
+
   savePosition() {
     const s = this.session;
-    if (!s || !this.isVod() || s.kind === 'jellyfin' || s.kind === 'youtube') return;
-    if (this.currentUrl) saveResume(this.currentUrl, this.time(), this.duration()).catch(() => {});
+    if (!s || s.kind === 'youtube' || !this.isVod() || this.media.ended) return;
+    const id = this.resumeId();
+    if (!id) return;
+    this.lastSaved = Date.now();
+    const t = this.time();
+    const d = this.duration();
+    let meta;
+    if (s.kind === 'jellyfin') meta = { kind: 'jellyfin', itemId: s.item.Id };
+    else if (s.kind === 'channel') {
+      const ch = s.channels[s.index];
+      meta = { kind: 'channel', title: ch.name, subtitle: ch.group || '', image: ch.logo || '', sourceId: s.sourceId, channel: { id: ch.id, name: ch.name, url: ch.url, logo: ch.logo, group: ch.group, kind: ch.kind } };
+    } else meta = { kind: 'url', title: s.title || '', subtitle: s.subtitle || '', image: s.image || '', playUrl: s.url, type: s.type || 'auto' };
+    saveResume(id, t, d, meta).catch(() => {});
+  }
+
+  /** Server position of a Jellyfin item (fresh from the server, so another device's progress counts too). */
+  async jellyfinResumePosition(item) {
+    if (!store.get('player.resume')) return 0;
+    let ticks = (item.UserData && item.UserData.PlaybackPositionTicks) || 0;
+    let lastPlayed = item.UserData && item.UserData.LastPlayedDate ? Date.parse(item.UserData.LastPlayedDate) : 0;
+    const fresh = await Promise.race([jf.item(item.Id).catch(() => null), new Promise((r) => setTimeout(() => r(null), 2500))]);
+    if (fresh && fresh.UserData) {
+      ticks = fresh.UserData.PlaybackPositionTicks || 0;
+      lastPlayed = fresh.UserData.LastPlayedDate ? Date.parse(fresh.UserData.LastPlayedDate) : lastPlayed;
+      if (fresh.UserData.Played && !ticks) return 0;
+    }
+    let sec = ticks / 1e7;
+    // Local copy is newer (e.g. the TV was switched off before the server got the last report).
+    const local = await getResumeEntry('jf:' + item.Id).catch(() => null);
+    if (local && local.pos > 5 && (!sec || local.at > lastPlayed + 60000)) sec = local.pos;
+    return sec;
+  }
+
+  /** "Direkt fortsetzen" (default) or ask first. Returns the start position in seconds. */
+  async decideResume(pos, token) {
+    if (store.get('player.resumeMode') !== 'ask') return pos;
+    this.spinner.classList.remove('show');
+    const v = await pickOption('Weiterschauen?', [
+      { value: 'resume', label: 'Fortsetzen bei ' + formatTime(pos) },
+      { value: 'start', label: 'Von vorn beginnen' },
+    ], 'resume');
+    if (token === this.loadToken) this.spinner.classList.add('show');
+    return v === 'start' ? 0 : pos;
+  }
+
+  showRestart(pos) {
+    this.restartBtn.replaceChildren(icon('restart'), h('span', `Fortgesetzt bei ${formatTime(pos)} · Von vorn`));
+    this.restartBtn.classList.add('show');
+    clearTimeout(this.restartTimer);
+    this.restartTimer = setTimeout(() => this.hideRestart(), 9000);
+  }
+
+  hideRestart() {
+    clearTimeout(this.restartTimer);
+    const hadFocus = this.restartBtn.contains(document.activeElement);
+    this.restartBtn.classList.remove('show');
+    if (hadFocus) this.root.focus({ preventScroll: true });
+  }
+
+  restartFromBeginning() {
+    this.hideRestart();
+    this.seekTo(0);
+    if (this.media.paused) this.media.play().catch(() => {});
+    toast('Von vorn', { iconName: 'restart' });
+  }
+
+  /** Remembers what is playing – for "Fortsetzen" on HOME and "Beim App-Start fortsetzen". */
+  rememberLast(s) {
+    let e = null;
+    if (s.kind === 'channel') {
+      const ch = s.channels[s.index];
+      e = { kind: 'channel', sourceId: s.sourceId, url: ch.url, channelId: ch.id, title: ch.name, subtitle: ch.group || '', image: ch.logo || '', live: ch.kind !== 'vod' };
+    } else if (s.kind === 'jellyfin') {
+      const it = s.item;
+      e = { kind: 'jellyfin', itemId: it.Id, title: it.SeriesName || it.Name, subtitle: it.SeriesName ? `S${it.ParentIndexNumber || '?'}E${it.IndexNumber || '?'} · ${it.Name}` : '', image: jf.thumbUrl(it) || '' };
+    } else if (s.kind === 'url') {
+      e = { kind: 'url', url: s.url, title: s.title || '', subtitle: s.subtitle || '', type: s.type || 'auto', live: !!s.live, resumeId: s.resumeId || null };
+    }
+    if (e) setLast(e);
+  }
+
+  /** App goes to the background / is closed: store the position right away. */
+  onHidden() {
+    const s = this.session;
+    if (!s) return;
+    this.savePosition();
+    flushResume();
+    if (s.kind === 'jellyfin' && s.pb) jf.reportProgress(s.item, s.pb, this.time(), true);
   }
 
   // ------------------------------------------------------------------ UI updates
@@ -935,8 +1060,9 @@ class Player {
       { value: 'aspect', label: 'Bildformat', description: { contain: 'Einpassen', cover: 'Zoomen (füllen)', fill: 'Strecken' }[store.get('player.aspect')] },
       { value: 'speed', label: 'Geschwindigkeit', description: speed + '×' },
       { value: 'substyle', label: 'Untertitel-Darstellung', description: 'Schrift, Größe, Farbe' },
+      this.isVod() ? { value: 'restart', label: 'Von vorn beginnen' } : null,
       { value: 'info', label: 'Stream-Info' },
-    ]);
+    ].filter(Boolean));
     if (v === 'aspect') {
       const a = await pickOption('Bildformat', [
         { value: 'contain', label: 'Einpassen' },
@@ -951,6 +1077,7 @@ class Player {
       const r = await pickOption('Geschwindigkeit', [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((x) => ({ value: x, label: x + '×' })), speed);
       if (r) this.media.playbackRate = r;
     } else if (v === 'substyle') this.subtitleStyleDialog();
+    else if (v === 'restart') this.restartFromBeginning();
     else if (v === 'info') this.streamInfo();
   }
 
@@ -1397,14 +1524,33 @@ export function playChannel(sourceId, channels, index) {
   return player().open({ kind: 'channel', sourceId, channels, index });
 }
 
-export function playUrl(url, { title, subtitle, type, live } = {}) {
-  return player().open({ kind: 'url', url, title, subtitle, type, live });
+export function playUrl(url, { title, subtitle, type, live, resumeId, image } = {}) {
+  return player().open({ kind: 'url', url, title, subtitle, type, live, resumeId, image });
 }
 
+/** Without startMs it continues where it stopped (Einstellungen → Player → Wiedergabe fortsetzen). */
 export function playJellyfin(item, { startMs } = {}) {
-  let start = startMs;
-  if (start === undefined && store.get('player.resume') && item.UserData && item.UserData.PlaybackPositionTicks) start = item.UserData.PlaybackPositionTicks / 10000;
-  return player().open({ kind: 'jellyfin', item, startMs: start || 0 });
+  return player().open({ kind: 'jellyfin', item, startMs });
+}
+
+/** Continues an entry of resume.getLast() / listResume(): channel, Jellyfin item or link. */
+export async function continuePlayback(e) {
+  if (!e) return;
+  if (e.kind === 'jellyfin') {
+    const it = await jf.item(e.itemId);
+    return playJellyfin(it);
+  }
+  if (e.kind === 'channel') {
+    const pl = await iptv.getPlaylist(e.sourceId).catch(() => null);
+    const url = e.url || (e.channel && e.channel.url);
+    const list = (pl && pl.channels) || [];
+    let idx = list.findIndex((c) => c.url === url);
+    if (idx < 0 && e.channelId) idx = list.findIndex((c) => c.id === e.channelId);
+    if (idx >= 0) return playChannel(e.sourceId, list, idx);
+    if (e.channel) return playChannel(e.sourceId, [e.channel], 0);
+    throw new Error('Sender nicht mehr in der Liste');
+  }
+  return playUrl(e.playUrl || e.url, { title: e.title, subtitle: e.subtitle, type: e.type, live: e.live, resumeId: e.resumeId || (e.playUrl ? e.url : undefined), image: e.image });
 }
 
 export function playYouTube(id, { title, startSeconds } = {}) {
