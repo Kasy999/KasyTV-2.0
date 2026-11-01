@@ -98,6 +98,8 @@ class Player {
     this.btnPlay = cb('pause', 'Wiedergabe/Pause', () => this.togglePlay(), 'primary');
     this.btnFwd = cb('forward', 'Vorspulen', () => this.seekBy(store.get('player.seekStep')), 'vod-only');
     this.btnNext = cb('skipNext', 'Nächster Sender', () => this.zapBy(1), 'live-only');
+    this.btnPrevEp = cb('skipPrev', 'Vorherige Folge', () => this.playAdjacent('prev'), 'ep-prev');
+    this.btnNextEp = cb('skipNext', 'Nächste Folge', () => this.playAdjacent('next'), 'ep-next');
     this.btnList = cb('list', 'Senderliste', () => this.openChannelPanel(), 'live-only');
     this.btnFav = cb('star', 'Favorit', () => this.toggleFavorite(), 'live-only');
     this.btnGuide = cb('guide', 'TV-Programm & Archiv', () => this.openGuide(), 'live-only');
@@ -112,7 +114,7 @@ class Player {
     const controls = h(
       'div.osd-controls',
       { data: { focusGroup: true } },
-      h('div.osd-group', this.btnPrev, this.btnRew, this.btnPlay, this.btnFwd, this.btnNext),
+      h('div.osd-group', this.btnPrev, this.btnPrevEp, this.btnRew, this.btnPlay, this.btnFwd, this.btnNextEp, this.btnNext),
       h('div.osd-spacer'),
       h('div.osd-group', this.btnList, this.btnGuide, this.btnFav, this.btnAudio, this.btnSubs, this.btnQuality, this.btnMute, this.btnMore, this.btnPip, this.btnFs),
     );
@@ -199,8 +201,7 @@ class Player {
     this.skipper = null;
     this.subs.clear();
     this.hideSkip();
-    this.nextCard.classList.remove('show');
-    clearInterval(this.nextTimer);
+    this.hideUpNext();
     if (this.yt) {
       this.yt.destroy();
       this.yt = null;
@@ -259,6 +260,7 @@ class Player {
     this.updateHeader();
     // Touch: show the controls briefly. TV: only the channel banner – ▲▼ zap right away, OK opens the OSD.
     if (!inputMode.isTV()) this.showOsd(false);
+    this.loadAdjacent(s);
     try {
       if (s.kind === 'youtube') await this.startYouTube(s, token);
       else if (s.kind === 'jellyfin') await this.startJellyfin(s, token);
@@ -402,7 +404,10 @@ class Player {
       m.addEventListener(ev, fn);
       this.mediaHandlers.push([m, ev, fn]);
     };
-    on('timeupdate', () => this.updateProgress());
+    on('timeupdate', () => {
+      this.updateProgress();
+      this.checkUpNext();
+    });
     on('durationchange', () => this.updateUi());
     on('progress', () => this.updateProgress());
     on('play', () => this.updatePlayState());
@@ -447,9 +452,20 @@ class Player {
   async onEnded() {
     const s = this.session;
     if (!s) return;
+    if (this.adjacent && this.adjacent.next) {
+      // Ran into the end: autoplay → straight on, unless the credits were watched on purpose (then a short countdown).
+      const auto = store.get('player.autoplayNext');
+      if (auto && !(this.upNext && this.upNext.dismissed)) this.playAdjacent('next');
+      else this.showUpNext({ countdown: auto ? 5 : 0 });
+      return;
+    }
     if (s.kind === 'jellyfin' && s.item.Type === 'Episode' && store.get('player.autoplayNext')) {
       const next = await jf.nextEpisode(s.item).catch(() => null);
-      if (next && this.session === s) return this.offerNext(next);
+      if (next && this.session === s) {
+        this.adjacent = { ...(this.adjacent || {}), next };
+        this.updateEpisodeButtons();
+        return this.showUpNext({ countdown: 5 });
+      }
     }
     if (s.kind === 'channel' && s.channels[s.index].kind !== 'vod') {
       // live stream ended – try to reconnect once
@@ -459,34 +475,120 @@ class Player {
     this.showOsd(true);
   }
 
-  offerNext(next) {
-    let left = 10;
-    const label = h('span');
-    const go = () => {
-      clearInterval(this.nextTimer);
-      this.nextCard.classList.remove('show');
-      this.open({ kind: 'jellyfin', item: next, startMs: 0 });
+  // ------------------------------------------------------------------ next / previous episode
+  /** Finds the previous / next episode (Jellyfin series) or the neighbouring film/episode of a VOD playlist. */
+  async loadAdjacent(s) {
+    this.adjacent = { prev: null, next: null };
+    this.upNext = { shown: false, dismissed: false };
+    this.updateEpisodeButtons();
+    if (s.kind === 'jellyfin' && s.item.Type === 'Episode') {
+      const adj = await jf.adjacentEpisodes(s.item).catch(() => null);
+      if (this.session !== s || !adj) return;
+      this.adjacent = adj;
+    } else if (s.kind === 'channel') {
+      const cur = s.channels[s.index];
+      if (!cur || cur.kind !== 'vod') return;
+      const at = (i) => {
+        const c = s.channels[i];
+        return c && c.kind === 'vod' && (c.group || '') === (cur.group || '') ? { channelIndex: i, Name: c.name, logo: c.logo } : null;
+      };
+      this.adjacent = { prev: at(s.index - 1), next: at(s.index + 1) };
+    }
+    this.updateEpisodeButtons();
+    this.setupMediaSession();
+  }
+
+  updateEpisodeButtons() {
+    const a = this.adjacent || {};
+    this.root.classList.toggle('has-prev-ep', !!a.prev);
+    this.root.classList.toggle('has-next-ep', !!a.next);
+    const label = (btn, text) => {
+      btn.title = text;
+      btn.setAttribute('aria-label', text);
     };
-    const cancel = () => {
-      clearInterval(this.nextTimer);
-      this.nextCard.classList.remove('show');
-      this.showOsd(true);
+    label(this.btnNextEp, a.next ? 'Nächste Folge: ' + episodeTitle(a.next) : 'Nächste Folge');
+    label(this.btnPrevEp, a.prev ? 'Vorherige Folge: ' + episodeTitle(a.prev) : 'Vorherige Folge');
+  }
+
+  playAdjacent(dir) {
+    const a = this.adjacent && this.adjacent[dir];
+    const s = this.session;
+    if (!a || !s) return false;
+    this.hideUpNext();
+    if (a.channelIndex !== undefined && s.kind === 'channel') {
+      s.index = a.channelIndex;
+      this.stopCurrent().then(() => this.start());
+    } else this.open({ kind: 'jellyfin', item: a, startMs: 0 });
+    return true;
+  }
+
+  /** Called on every time update: shows the "next episode" card at the credits / shortly before the end. */
+  checkUpNext() {
+    const a = this.adjacent && this.adjacent.next;
+    const u = this.upNext;
+    if (!a || !u || !this.isVod()) return;
+    const t = this.time();
+    const d = this.duration();
+    if (!(d > 60)) return;
+    const outro = this.skipper && this.skipper.segments.find((x) => x.category === 'Outro' && x.end >= d - 60);
+    const lead = store.get('player.upNextSeconds') || 30;
+    const at = outro ? Math.min(outro.start, d - 5) : d - lead;
+    if (t < at - 2) {
+      // Seeked back before the credits: offer again later.
+      if (u.shown) this.hideUpNext();
+      u.shown = false;
+      u.dismissed = false;
+      return;
+    }
+    if (u.shown || u.dismissed || t >= d - 0.3 || this.media.paused) return;
+    this.showUpNext({ countdown: store.get('player.autoplayNext') ? store.get('player.nextCountdown') || 10 : 0 });
+  }
+
+  showUpNext({ countdown = 0 } = {}) {
+    const next = this.adjacent && this.adjacent.next;
+    if (!next) return;
+    this.upNext.shown = true;
+    clearInterval(this.nextTimer);
+    const go = () => this.playAdjacent('next');
+    const dismiss = () => {
+      this.upNext.dismissed = true;
+      this.hideUpNext();
+      if (inputMode.isTV()) this.root.focus({ preventScroll: true });
     };
-    const title = (next.SeriesName ? `S${next.ParentIndexNumber || '?'}E${next.IndexNumber || '?'} · ` : '') + next.Name;
-    const playBtn = h('button.btn.primary', { type: 'button', data: { focus: true }, onClick: go }, icon('play'), h('span.btn-label', 'Jetzt abspielen'));
+    const label = h('span.next-count');
+    const ring = h('span.next-progress');
+    const playBtn = h('button.btn.primary.next-play', { type: 'button', data: { focus: true }, onClick: go }, ring, icon('play'), h('span.btn-label', 'Nächste Folge'));
+    const thumb = next.Id ? jf.imageUrl(next, 'Primary', { width: 320 }) || jf.posterUrl(next) : next.logo;
     this.nextCard.replaceChildren(
-      h('div.next-info', h('div.muted', 'Nächste Folge'), h('div.next-title', title), label),
-      h('div.next-actions', playBtn, h('button.btn.ghost', { type: 'button', data: { focus: true }, onClick: cancel }, h('span.btn-label', 'Abbrechen'))),
+      h(
+        'div.next-box',
+        thumb ? h('div.next-thumb', img(thumb, '', 'thumb', episodeTitle(next))) : null,
+        h('div.next-info', h('div.muted', 'Als Nächstes'), h('div.next-title', episodeTitle(next)), label),
+        h('div.next-actions', playBtn, h('button.btn.ghost', { type: 'button', data: { focus: true }, onClick: dismiss }, h('span.btn-label', this.media.ended ? 'Schließen' : 'Abspann ansehen'))),
+      ),
     );
     this.nextCard.classList.add('show');
-    focus(playBtn);
-    const tick = () => {
-      label.textContent = `Startet in ${left} s`;
-      if (left-- <= 0) go();
-    };
-    tick();
+    if (inputMode.isTV()) focus(playBtn);
+    if (countdown > 0) {
+      let left = countdown;
+      const total = countdown;
+      const tick = () => {
+        label.textContent = `Startet in ${left} s`;
+        ring.style.width = ((total - left) / total) * 100 + '%';
+        if (left-- <= 0) go();
+      };
+      tick();
+      this.nextTimer = setInterval(() => {
+        if (!this.media.paused || this.media.ended) tick(); // pausing also pauses the countdown
+      }, 1000);
+    } else label.textContent = '';
+  }
+
+  hideUpNext() {
     clearInterval(this.nextTimer);
-    this.nextTimer = setInterval(tick, 1000);
+    const hadFocus = this.nextCard.contains(document.activeElement);
+    this.nextCard.classList.remove('show');
+    if (hadFocus) this.root.focus({ preventScroll: true });
   }
 
   savePosition() {
@@ -932,6 +1034,7 @@ class Player {
 
   // ------------------------------------------------------------------ skip / ads
   onSkipUi(ui) {
+    if (ui.type === 'button' && ui.segment.category === 'Outro' && this.adjacent && this.adjacent.next) return; // "next episode" card instead
     if (ui.type === 'button') {
       this.skipBtn.replaceChildren(icon('skipNext'), h('span', `${ui.segment.label} überspringen`));
       this.skipBtn.classList.add('show');
@@ -1022,13 +1125,17 @@ class Player {
       case 'stop':
         this.close();
         break;
-      case 'forward':
       case 'next':
+        if (this.isVod() && this.playAdjacent('next')) break;
+      // falls through
+      case 'forward':
         if (this.isVod()) this.seekBy(step * 3);
         else this.zapBy(1);
         break;
-      case 'rewind':
       case 'previous':
+        if (this.isVod() && this.playAdjacent('prev')) break;
+      // falls through
+      case 'rewind':
         if (this.isVod()) this.seekBy(-step * 3);
         else this.zapBy(-1);
         break;
@@ -1190,8 +1297,10 @@ class Player {
       set('pause', () => this.media.pause());
       set('seekbackward', () => this.seekBy(-store.get('player.seekStep')));
       set('seekforward', () => this.seekBy(store.get('player.seekStep')));
-      set('previoustrack', s.kind === 'channel' ? () => this.zapBy(-1) : null);
-      set('nexttrack', s.kind === 'channel' ? () => this.zapBy(1) : null);
+      const adj = this.adjacent || {};
+      const live = s.kind === 'channel' && s.channels[s.index].kind !== 'vod';
+      set('previoustrack', live ? () => this.zapBy(-1) : adj.prev ? () => this.playAdjacent('prev') : null);
+      set('nexttrack', live ? () => this.zapBy(1) : adj.next ? () => this.playAdjacent('next') : null);
       set('seekto', (d) => this.seekTo(d.seekTime));
     } catch {
       /* ignore */
@@ -1268,6 +1377,12 @@ class Player {
     if (document.fullscreenElement || document.webkitFullscreenElement) this.exitFullscreen();
     else this.enterFullscreen(false);
   }
+}
+
+function episodeTitle(it) {
+  if (!it) return '';
+  if (it.SeriesName || it.IndexNumber) return `S${it.ParentIndexNumber || '?'}E${it.IndexNumber || '?'} · ${it.Name}`;
+  return it.Name || '';
 }
 
 function player() {

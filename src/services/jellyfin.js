@@ -171,6 +171,16 @@ export async function nextEpisode(ep) {
   return list.length > 1 ? list[1] : null;
 }
 
+/** Previous and next episode of a series (across seasons). → { prev, next } */
+export async function adjacentEpisodes(ep) {
+  if (!ep || !ep.SeriesId) return { prev: null, next: null };
+  const r = await request('GET', `/Shows/${ep.SeriesId}/Episodes`, { query: { UserId: cfg().userId, AdjacentTo: ep.Id, Fields: FIELDS } });
+  const list = (r && r.Items) || [];
+  const i = list.findIndex((x) => x.Id === ep.Id);
+  if (i < 0) return { prev: null, next: (await nextEpisode(ep).catch(() => null)) || null };
+  return { prev: list[i - 1] || null, next: list[i + 1] || null };
+}
+
 export async function setFavorite(id, fav) {
   return request(fav ? 'POST' : 'DELETE', `/Users/${cfg().userId}/FavoriteItems/${id}`);
 }

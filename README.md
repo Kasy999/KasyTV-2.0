@@ -44,6 +44,13 @@ Jellyfin im Heimnetz (`http://192.168…:8096`), HTTP-Playlists und HTTP-Streams
 * für Playlists/Streams den eingebauten **Proxy** von `tools/serve.mjs` eintragen (siehe unten).
 
 
+### Nächste Folge
+
+- Im Player erscheinen bei Serienfolgen (Jellyfin) und bei Filmen/Folgen aus derselben Gruppe einer VOD-Playlist die Knöpfe „Vorherige Folge“ und „Nächste Folge“.
+- Beim Abspann (Jellyfin-Segment „Outro“) oder 30 s vor Ende erscheint „Als Nächstes“ mit Vorschaubild und Countdown. Mit „Abspann ansehen“ lässt sich das abbrechen, Pause hält den Countdown an.
+- Die Medientasten ⏭/⏮ der Fernbedienung, Kopfhörer und Sperrbildschirm wechseln die Folge.
+- Einstellbar unter Einstellungen → Player: automatisch weiter, Einblendezeit und Countdown.
+
 ### MKV-Decoder (ohne Umwandlung)
 
 MKV-Filme und -Serien von Jellyfin (und `.mkv`-Links in Playlists) spielt Kasy TV direkt ab, ohne dass der Server etwas umwandelt:

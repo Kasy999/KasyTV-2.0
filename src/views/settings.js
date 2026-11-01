@@ -331,7 +331,9 @@ const BUILDERS = {
       section(
         'Verhalten',
         toggleRow('Wiedergabe fortsetzen', 'Filme und Folgen an der letzten Stelle fortsetzen', 'player.resume'),
-        toggleRow('Nächste Folge automatisch', null, 'player.autoplayNext'),
+        toggleRow('Nächste Folge automatisch', 'Spielt die nächste Folge nach einem Countdown von selbst ab.', 'player.autoplayNext'),
+        stepperRow('„Nächste Folge“ einblenden', 'So lange vor dem Ende – beim Abspann (Jellyfin-Segmente) schon dort', 'player.upNextSeconds', { min: 10, max: 180, step: 10, format: (v) => v + ' s vor Ende' }),
+        stepperRow('Countdown bis zur nächsten Folge', null, 'player.nextCountdown', { min: 3, max: 30, step: 1, format: (v) => v + ' s' }),
         selectRow('Bildformat', null, 'player.aspect', [
           { value: 'contain', label: 'Einpassen' },
           { value: 'cover', label: 'Zoomen (füllen)' },

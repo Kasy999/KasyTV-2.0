@@ -57,6 +57,8 @@ export const DEFAULTS = {
     engine: 'auto', // auto | hlsjs | native
     mkvDecoder: true, // Kasy MKV decoder: MKV without server conversion
     autoplayNext: true,
+    upNextSeconds: 30, // show "next episode" this long before the end (or at the credits)
+    nextCountdown: 10, // seconds until the next episode starts by itself
     resume: true,
     aspect: 'contain', // contain | cover | fill
     bufferSeconds: 30,
