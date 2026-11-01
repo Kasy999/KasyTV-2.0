@@ -22,6 +22,7 @@ import { toast } from '../components/toast.js';
 import { SegmentSkipper, youtubeId } from '../services/segments.js';
 import * as iptv from '../services/iptv.js';
 import * as epg from '../services/epg.js';
+import { hasArchive, buildArchiveUrl } from '../services/catchup.js';
 import { navigate } from '../core/router.js';
 import * as jf from '../services/jellyfin.js';
 import { getResumeEntry, saveResume, flushResume, setLast, removeResume } from '../services/resume.js';
@@ -32,6 +33,7 @@ let instance = null;
 class Player {
   constructor() {
     this.session = null;
+    this.tl = { offset: 0, total: 0, reload: null, live: false, windowStart: 0 };
     this.osdVisible = false;
     this.hideTimer = null;
     this.mediaHandlers = [];
@@ -45,6 +47,12 @@ class Player {
       onTracks: () => {},
       onFatal: (e) => this.showError(e.message),
       onNotice: (msg) => toast(msg, { duration: 4500 }),
+      // The stream itself can't jump there (no ranges / no index) → request it again from that position.
+      onServerSeek: (local) => {
+        const t = (this.tl.offset || 0) + local - (this.tl.base || 0);
+        if (this.tl.reload) this.scheduleReload(t);
+        else toast('Spulen ist bei diesem Stream nicht möglich');
+      },
     });
     this.subs = new SubtitleRenderer(this.video, this.subLayer);
     this.applyAspect();
@@ -99,6 +107,7 @@ class Player {
     this.btnPlay = cb('pause', 'Wiedergabe/Pause', () => this.togglePlay(), 'primary');
     this.btnFwd = cb('forward', 'Vorspulen', () => this.seekBy(store.get('player.seekStep')), 'vod-only');
     this.btnNext = cb('skipNext', 'Nächster Sender', () => this.zapBy(1), 'live-only');
+    this.btnTimeshift = cb('rewind', 'Zurückspulen (Archiv)', () => this.seekBy(-store.get('player.seekStep') * 3), 'live-only ts-only');
     this.btnPrevEp = cb('skipPrev', 'Vorherige Folge', () => this.playAdjacent('prev'), 'ep-prev');
     this.btnNextEp = cb('skipNext', 'Nächste Folge', () => this.playAdjacent('next'), 'ep-next');
     this.btnList = cb('list', 'Senderliste', () => this.openChannelPanel(), 'live-only');
@@ -115,7 +124,7 @@ class Player {
     const controls = h(
       'div.osd-controls',
       { data: { focusGroup: true } },
-      h('div.osd-group', this.btnPrev, this.btnPrevEp, this.btnRew, this.btnPlay, this.btnFwd, this.btnNextEp, this.btnNext),
+      h('div.osd-group', this.btnPrev, this.btnTimeshift, this.btnPrevEp, this.btnRew, this.btnPlay, this.btnFwd, this.btnNextEp, this.btnNext),
       h('div.osd-spacer'),
       h('div.osd-group', this.btnList, this.btnGuide, this.btnFav, this.btnAudio, this.btnSubs, this.btnQuality, this.btnMute, this.btnMore, this.btnPip, this.btnFs),
     );
@@ -268,6 +277,7 @@ class Player {
     const token = (this.loadToken = (this.loadToken || 0) + 1);
     this.resumedAt = 0;
     this.hideRestart();
+    this.resetTimeline();
     this.errorBox.classList.remove('show');
     this.spinner.classList.add('show');
     this.updateHeader();
@@ -311,6 +321,7 @@ class Player {
         await this.startYouTube({ id: yid, title: ch.name }, token);
         return;
       }
+      if (s.archive && s.archive.channel !== ch) delete s.archive; // zapped away from the time-shift
     } else {
       url = s.url;
       type = s.type || 'auto';
@@ -329,6 +340,14 @@ class Player {
     }
     this.resumedAt = startSeconds;
     this.video.hidden = false;
+    if (s.archive) {
+      // Archive programme / time-shift: the stream starts at the requested position (catch-up URL).
+      if (s.archiveOffset === undefined) s.archiveOffset = startSeconds;
+      this.resumedAt = s.archiveOffset;
+      await this.loadArchive(s.archiveOffset);
+      this.skipper = new SegmentSkipper(this.adapter(), (ui) => this.onSkipUi(ui));
+      return;
+    }
     await this.engine.load({ url, type, live, startSeconds, allowProxy: true });
     // A plain direct link with ad markers etc. – skipper for nothing; keep structure uniform.
     this.skipper = new SegmentSkipper(this.adapter(), (ui) => this.onSkipUi(ui));
@@ -345,12 +364,16 @@ class Player {
       s.startMs = startMs;
       this.resumedAt = startMs / 1000;
     }
-    const pb = await jf.getPlayback(s.item, { startMs, audioIndex: opts.audioIndex, subtitleIndex: opts.subtitleIndex, forceTranscode: opts.forceTranscode });
+    const pb = await jf.getPlayback(s.item, { startMs, audioIndex: opts.audioIndex, subtitleIndex: opts.subtitleIndex, forceTranscode: opts.forceTranscode, remuxAt: opts.remuxAt });
     if (token !== this.loadToken) return;
     s.pb = pb;
     this.video.hidden = false;
+    const remux = pb.remuxAt !== null && pb.remuxAt !== undefined;
+    const mkvOpts = pb.mkv ? { ...pb.mkv, onServerSeek: (local) => this.serverSeek((this.tl.offset || 0) + local - (this.tl.base || 0)) } : null;
     try {
-      await this.engine.load({ url: pb.url, type: pb.type === 'hls' ? 'hls' : pb.type === 'mkv' ? 'mkv' : 'file', live: false, startSeconds: pb.startSeconds, mkv: pb.mkv });
+      await this.engine.load({ url: pb.url, type: pb.type === 'hls' ? 'hls' : pb.type === 'mkv' ? 'mkv' : 'file', live: false, startSeconds: remux ? 0 : pb.startSeconds, mkv: mkvOpts });
+      this.setJellyfinTimeline(s, pb, startMs);
+      if (remux) await this.alignRemux(pb.remuxAt);
     } catch (e) {
       // Direct play failed (codec the browser can't decode after all) → ask the server to transcode.
       if (pb.method !== 'Transcode' && !opts.forceTranscode) {
@@ -446,6 +469,10 @@ class Player {
       this.savePosition();
     });
     on('playing', () => {
+      if (this.tl.needBase) {
+        this.tl.base = this.media.currentTime || 0;
+        this.tl.needBase = false;
+      }
       this.spinner.classList.remove('show');
       this.updatePlayState();
     });
@@ -464,13 +491,69 @@ class Player {
     this.mediaHandlers = [];
   }
 
+  // ------------------------------------------------------------------ timeline
+  // The player's own timeline: for archive programmes, live time-shift and streams the server starts at a
+  // position, the video element only knows a part (or no length at all). offset = where the stream starts on
+  // the timeline, total = real length, reload(t) = request the stream again from position t.
+  resetTimeline() {
+    clearTimeout(this.reloadTimer);
+    this.tl = { offset: 0, total: 0, reload: null, live: false, windowStart: 0, base: 0, needBase: false };
+    this.pendingSeek = null;
+  }
+
+  /**
+   * Position on the timeline. base = media time at which the stream starts (archive streams often don't
+   * start at 0, and hls.js starts "live-like" streams at their end) – measured when playback starts.
+   */
   time() {
-    return this.media.currentTime || 0;
+    if (this.pendingSeek !== null && this.pendingSeek !== undefined) return this.pendingSeek;
+    const tl = this.tl || {};
+    if (tl.needBase) return tl.offset || 0;
+    return (tl.offset || 0) + ((this.media.currentTime || 0) - (tl.base || 0));
+  }
+
+  /** Media time of a timeline position. */
+  localTime(t) {
+    const tl = this.tl || {};
+    return t - (tl.offset || 0) + (tl.base || 0);
   }
 
   duration() {
+    const tl = this.tl || {};
+    if (tl.live) return Math.max(1, (Date.now() - tl.windowStart) / 1000);
+    if (tl.total > 0) return tl.total;
     const d = this.media.duration;
     return isFinite(d) ? d : NaN;
+  }
+
+  /** Can the video element itself jump to this position (inside its seekable range)? */
+  canSeekNative(local) {
+    const m = this.media;
+    if (m !== this.video) return true;
+    if (local < 0) return false;
+    const r = m.seekable;
+    for (let i = 0; i < r.length; i++) if (local >= r.start(i) - 0.5 && local <= r.end(i) + 0.5) return true;
+    return false;
+  }
+
+  /** Requests the stream again from position t (debounced, so holding ◀ ▶ triggers one request). */
+  scheduleReload(t) {
+    this.pendingSeek = t;
+    this.updateProgress();
+    clearTimeout(this.reloadTimer);
+    this.reloadTimer = setTimeout(async () => {
+      const target = this.pendingSeek;
+      const token = this.loadToken;
+      this.spinner.classList.add('show');
+      try {
+        await this.tl.reload(target);
+      } catch (e) {
+        if (token === this.loadToken) this.showError(e.message || String(e));
+      } finally {
+        if (token === this.loadToken) this.pendingSeek = null;
+        this.updateProgress();
+      }
+    }, 650);
   }
 
   isVod() {
@@ -622,6 +705,122 @@ class Player {
     if (hadFocus) this.root.focus({ preventScroll: true });
   }
 
+  // ------------------------------------------------------------------ archive / time-shift / server seek
+  canTimeshift() {
+    const s = this.session;
+    return !!(s && s.kind === 'channel' && hasArchive(s.channels[s.index]));
+  }
+
+  /** Live channel → time-shift: plays the archive from `back` seconds ago; the bar spans the last hours. */
+  startTimeshift(back) {
+    const s = this.session;
+    const ch = s.channels[s.index];
+    const now = Date.now();
+    // Window: the running programme (EPG) or the last 3 hours, at most as far as the archive reaches.
+    let windowStart = now - 3 * 3600e3;
+    const d = epg.epgStatus(s.sourceId);
+    if (d) {
+      const nn = epg.nowNext(d, ch);
+      if (nn && nn.now && nn.now.start > now - 6 * 3600e3) windowStart = Math.min(windowStart, nn.now.start);
+    }
+    windowStart = Math.max(windowStart, now - ch.catchup.days * 86400e3);
+    s.archive = { channel: ch, start: windowStart, stop: 0, live: true };
+    s.archiveOffset = Math.max(0, (now - windowStart) / 1000 - back);
+    this.root.classList.remove('is-live');
+    toast('Zeitversetzt · ▶▶ bis zum Ende = wieder live', { iconName: 'rewind' });
+    this.start();
+  }
+
+  goLive() {
+    const s = this.session;
+    if (!s) return;
+    delete s.archive;
+    delete s.archiveOffset;
+    this.root.classList.add('is-live');
+    toast('Live', { iconName: 'tv' });
+    this.start();
+  }
+
+  /** Loads the archive / time-shift stream from position t (seconds on the programme timeline). */
+  async loadArchive(t) {
+    const s = this.session;
+    const a = s.archive;
+    const stop = a.live ? Date.now() : a.stop;
+    const reachable = (Math.min(stop, Date.now()) - a.start) / 1000 - 10; // a running programme exists only until now
+    t = clamp(t, 0, Math.max(0, reachable));
+    s.archiveOffset = t;
+    const url = buildArchiveUrl(a.channel, a.start + t * 1000, stop);
+    if (!url) throw new Error('Für diesen Sender gibt es kein Archiv');
+    this.tl = { offset: t, total: a.live ? 0 : (a.stop - a.start) / 1000, reload: (x) => this.reloadArchive(x), live: !!a.live, windowStart: a.start, base: 0, needBase: true };
+    this.currentUrl = url;
+    await this.engine.load({ url, type: 'auto', live: false, allowProxy: true });
+    // Some providers deliver the whole programme as a seekable recording – then seek natively from 0.
+    const md = this.video.duration;
+    if (!a.live && t === 0 && isFinite(md) && md > this.tl.total * 0.8) {
+      // A complete recording from the start: its own times are the programme times.
+      this.tl.total = Math.max(this.tl.total, md);
+      this.tl.needBase = false;
+      this.tl.base = 0;
+    }
+  }
+
+  async reloadArchive(t) {
+    const token = this.loadToken;
+    const wasPaused = this.media.paused;
+    await this.loadArchive(t);
+    if (token !== this.loadToken) return;
+    if (!wasPaused) await this.safePlay();
+    this.updateUi();
+    this.savePosition();
+  }
+
+  /** Jellyfin: real runtime as timeline; jumps the stream can't do go through the server. */
+  setJellyfinTimeline(s, pb, startMs) {
+    const total = pb.durationSeconds || 0;
+    const md = this.video.duration;
+    let offset = 0;
+    let needBase = false;
+    if (pb.remuxAt !== null && pb.remuxAt !== undefined) {
+      offset = pb.remuxAt; // the server starts the file there
+      needBase = true;
+    } else if (pb.type === 'hls' && startMs > 0 && !isFinite(md)) {
+      offset = startMs / 1000; // converted stream that starts at the position
+      needBase = true;
+    }
+    this.tl = { offset, total, reload: (t) => this.serverSeek(t), live: false, windowStart: 0, base: 0, needBase };
+  }
+
+  /** Lets the Jellyfin server start the film at t (no ranges through the proxy, or a converted stream). */
+  serverSeek(t) {
+    const s = this.session;
+    if (!s || s.kind !== 'jellyfin' || !s.pb) return Promise.resolve();
+    if (this.serverSeekBusy) return Promise.resolve();
+    this.serverSeekBusy = true;
+    const pb = s.pb;
+    const wasPaused = this.media.paused;
+    const useRemux = pb.type === 'mkv' || pb.remuxAt !== null;
+    return this.reloadJellyfin({ startMs: t * 1000, audioIndex: pb.audioIndex, subtitleIndex: pb.subtitleIndex, remuxAt: useRemux ? t : undefined })
+      .then(() => {
+        if (wasPaused) this.media.pause();
+      })
+      .finally(() => {
+        this.serverSeekBusy = false;
+      });
+  }
+
+  /** Remuxed stream: its timestamps may start at the position instead of 0 – start where the data begins. */
+  async alignRemux() {
+    for (let i = 0; i < 40; i++) {
+      const b = this.video.buffered;
+      if (b.length) {
+        const start = b.start(0);
+        if (this.video.currentTime < start - 0.5) this.video.currentTime = start + 0.01;
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+
   /** Key under which the position of the current video is stored. */
   resumeId() {
     const s = this.session;
@@ -633,6 +832,7 @@ class Player {
   savePosition() {
     const s = this.session;
     if (!s || s.kind === 'youtube' || !this.isVod() || this.media.ended) return;
+    if (s.archive && s.archive.live) return; // time-shift of a live channel – nothing to continue later
     const id = this.resumeId();
     if (!id) return;
     this.lastSaved = Date.now();
@@ -643,7 +843,7 @@ class Player {
     else if (s.kind === 'channel') {
       const ch = s.channels[s.index];
       meta = { kind: 'channel', title: ch.name, subtitle: ch.group || '', image: ch.logo || '', sourceId: s.sourceId, channel: { id: ch.id, name: ch.name, url: ch.url, logo: ch.logo, group: ch.group, kind: ch.kind } };
-    } else meta = { kind: 'url', title: s.title || '', subtitle: s.subtitle || '', image: s.image || '', playUrl: s.url, type: s.type || 'auto' };
+    } else meta = { kind: 'url', title: s.title || '', subtitle: s.subtitle || '', image: s.image || '', playUrl: s.url, type: s.type || 'auto', archive: s.archive || null };
     saveResume(id, t, d, meta).catch(() => {});
   }
 
@@ -708,7 +908,7 @@ class Player {
       const it = s.item;
       e = { kind: 'jellyfin', itemId: it.Id, title: it.SeriesName || it.Name, subtitle: it.SeriesName ? `S${it.ParentIndexNumber || '?'}E${it.IndexNumber || '?'} · ${it.Name}` : '', image: jf.thumbUrl(it) || '' };
     } else if (s.kind === 'url') {
-      e = { kind: 'url', url: s.url, title: s.title || '', subtitle: s.subtitle || '', type: s.type || 'auto', live: !!s.live, resumeId: s.resumeId || null };
+      e = { kind: 'url', url: s.url, title: s.title || '', subtitle: s.subtitle || '', type: s.type || 'auto', live: !!s.live, resumeId: s.resumeId || null, archive: s.archive && !s.archive.live ? s.archive : null };
     }
     if (e) setLast(e);
   }
@@ -764,6 +964,7 @@ class Player {
     const s = this.session;
     const isChannel = s && s.kind === 'channel';
     this.root.classList.toggle('has-channels', !!isChannel && s.channels.length > 1);
+    this.root.classList.toggle('has-ts', this.canTimeshift());
     this.updateProgress();
     this.updatePlayState();
     this.updateMute();
@@ -881,12 +1082,32 @@ class Player {
   seekTo(t) {
     const d = this.duration();
     if (!isFinite(d)) return;
-    this.media.currentTime = clamp(t, 0, Math.max(0, d - 0.5));
-    this.updateProgress();
+    // Time-shift: forward to the end = back to live.
+    if (this.tl.live && t >= d - 8) {
+      this.goLive();
+      return;
+    }
+    t = clamp(t, 0, Math.max(0, d - 0.5));
+    const local = this.localTime(t);
+    if ((this.pendingSeek === null || this.pendingSeek === undefined) && !this.tl.needBase && this.canSeekNative(local)) {
+      this.media.currentTime = local;
+      this.updateProgress();
+      return;
+    }
+    if (this.tl.reload) {
+      this.scheduleReload(t);
+      return;
+    }
+    toast('Spulen ist bei diesem Stream nicht möglich');
   }
 
   seekBy(delta) {
-    if (!this.isVod()) return;
+    if (!this.isVod()) {
+      // Live channel with archive: rewinding switches to time-shift.
+      if (delta < 0 && this.canTimeshift()) this.startTimeshift(-delta);
+      else if (delta < 0) toast('Dieser Sender hat kein Archiv – zurückspulen nicht möglich');
+      return;
+    }
     this.seekTo(this.time() + delta);
     this.seekHint.textContent = (delta > 0 ? '+' : '−') + Math.abs(Math.round(delta)) + ' s';
     this.seekHint.classList.remove('left', 'right');
@@ -1105,8 +1326,9 @@ class Player {
     await this.stopCurrent();
     const token = (this.loadToken = (this.loadToken || 0) + 1);
     this.spinner.classList.add('show');
+    this.resetTimeline();
     try {
-      await this.startJellyfin(s, token, { ...opts, startMs: pos * 1000 });
+      await this.startJellyfin(s, token, { startMs: pos * 1000, ...opts });
       this.bindMedia();
       await this.safePlay();
       this.updateUi();
@@ -1261,9 +1483,13 @@ class Player {
         break;
       case 'previous':
         if (this.isVod() && this.playAdjacent('prev')) break;
+        if (!this.isVod()) {
+          this.zapBy(-1);
+          break;
+        }
       // falls through
       case 'rewind':
-        if (this.isVod()) this.seekBy(-step * 3);
+        if (this.isVod() || this.canTimeshift()) this.seekBy(-step * 3);
         else this.zapBy(-1);
         break;
       case 'channelup':
@@ -1524,8 +1750,8 @@ export function playChannel(sourceId, channels, index) {
   return player().open({ kind: 'channel', sourceId, channels, index });
 }
 
-export function playUrl(url, { title, subtitle, type, live, resumeId, image } = {}) {
-  return player().open({ kind: 'url', url, title, subtitle, type, live, resumeId, image });
+export function playUrl(url, { title, subtitle, type, live, resumeId, image, archive } = {}) {
+  return player().open({ kind: 'url', url, title, subtitle, type, live, resumeId, image, archive });
 }
 
 /** Without startMs it continues where it stopped (Einstellungen → Player → Wiedergabe fortsetzen). */
@@ -1550,7 +1776,7 @@ export async function continuePlayback(e) {
     if (e.channel) return playChannel(e.sourceId, [e.channel], 0);
     throw new Error('Sender nicht mehr in der Liste');
   }
-  return playUrl(e.playUrl || e.url, { title: e.title, subtitle: e.subtitle, type: e.type, live: e.live, resumeId: e.resumeId || (e.playUrl ? e.url : undefined), image: e.image });
+  return playUrl(e.playUrl || e.url, { title: e.title, subtitle: e.subtitle, type: e.type, live: e.live, resumeId: e.resumeId || (e.playUrl ? e.url : undefined), image: e.image, archive: e.archive || undefined });
 }
 
 export function playYouTube(id, { title, startSeconds } = {}) {

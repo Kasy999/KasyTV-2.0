@@ -135,6 +135,7 @@
 .error-box p { color: #d4dae6; }
 .error-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; margin-top: 0.75rem; }
 
+.player:not(.has-ts) .ts-only { display: none !important; }
 .player:not(.has-prev-ep) .ep-prev, .player:not(.has-next-ep) .ep-next { display: none !important; }
 
 /* "Next episode" card – sits bottom right while the credits keep playing */

@@ -45,7 +45,9 @@ export function nameKeys(name) {
   const keys = new Set();
   const a = normalizeName(name);
   if (a) keys.add(a);
-  const stripped = String(name || '').replace(/@[^@]*$/, '').replace(/\b(fernsehen|television|tv|channel|kanal|sender)\b/gi, ' ');
+  const stripped = String(name || '')
+    .replace(/@[^@]*$/, '')
+    .replace(/(^|[\s\-.,!])(fernsehen|television|tv|channel|kanal|sender|канал|тв|телеканал)(?=$|[\s\-.,!])/gi, ' ');
   const b = normalizeName(stripped);
   if (b && b.length >= 2) keys.add(b);
   return keys;
@@ -61,6 +63,12 @@ export const MIRRORS = [
   { value: 'de', label: 'Deutschland' },
   { value: 'at', label: 'Österreich' },
   { value: 'ch', label: 'Schweiz' },
+  { value: 'ru', label: 'Russland (iptvx.one)', description: 'Russische Sender, kompakte Fassung' },
+  { value: 'ru2', label: 'Russland (it999 / Edem)', description: 'Alternative für russische Sender' },
+  { value: 'ru3', label: 'Russland (epg.one)', description: 'Alternative für russische Sender' },
+  { value: 'ru4', label: 'Russland (epgshare01)', description: 'Alternative für russische Sender' },
+  { value: 'ru,ru2,ru3', label: 'Russland – alle Quellen', description: 'Nacheinander, bis die Sender abgedeckt sind' },
+  { value: 'ru,de', label: 'Russland + Deutschland', description: 'Gemischte Playlists' },
 ];
 export function mirrorUrl(id) {
   return new URL(`./epg/${id}.xml.gz`, location.href).href;
@@ -316,7 +324,12 @@ function hostOf(u) {
 
 function mirrorUrls() {
   const m = store.get('iptv.epgMirror');
-  return m && m !== 'off' ? [mirrorUrl(m)] : [];
+  if (!m || m === 'off') return [];
+  return String(m)
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map(mirrorUrl);
 }
 
 /** Downloads the EPG of a playlist source and stores it. */
@@ -346,6 +359,7 @@ export async function refreshEpg(sourceId) {
       if (ch.catchup && ch.catchup.days > maxDays) maxDays = ch.catchup.days;
     }
     const now = Date.now();
+    let covered = new Set();
     const filter = {
       fromMs: now - Math.min(Math.max(maxDays, 1), 14) * DAY - DAY / 2,
       toMs: now + 2 * DAY,
@@ -354,7 +368,8 @@ export async function refreshEpg(sourceId) {
         if (!out.size) {
           for (const n of [id, ...names]) for (const k of nameKeys(n)) for (const x of byName.get(k) || []) out.add(x);
         }
-        return Array.from(out);
+        // Several sources: a channel keeps the programme of the first source that had it.
+        return covered.size ? Array.from(out).filter((x) => !covered.has(x)) : Array.from(out);
       },
     };
 
@@ -365,6 +380,11 @@ export async function refreshEpg(sourceId) {
     const blocked = [];
     const tryUrls = async (urls, { mirror = false } = {}) => {
       for (const url of urls) {
+        covered = new Set(Object.keys(parser.programs));
+        // New source: its own channel table (same XMLTV id may mean something else there).
+        parser.accepted = {};
+        parser.channelNames = {};
+        parser.buf = '';
         try {
           const o = await openStream(url, { mirror });
           await readText(o.res, (t) => parser.feed(t), (bytes) => bus.emit('epg:progress', { sourceId, bytes, url }));

@@ -44,6 +44,17 @@ Jellyfin im Heimnetz (`http://192.168…:8096`), HTTP-Playlists und HTTP-Streams
 * für Playlists/Streams den eingebauten **Proxy** von `tools/serve.mjs` eintragen (siehe unten).
 
 
+### Spulen überall
+
+- **Archiv-Sendungen:** Der Player nutzt eine eigene Zeitleiste mit der Sendungslänge aus dem EPG. Spulen und Springen fordern den Archiv-Stream ab der neuen Stelle an.
+- **Live-Sender mit Archiv:** ◀◀ startet den Zeitversatz (laufende Sendung bzw. letzte 3 Stunden). ▶▶ bis zum Ende schaltet wieder live.
+- **Jellyfin:** Kann der Weg zum Server nicht in der Datei springen (keine Range-Anfragen, z. B. durch einen Proxy), startet der Server die Datei an der Stelle und verpackt sie nur um (Bild und meist auch Ton kopiert). So funktionieren Fortsetzen, Spulen und „Intro überspringen“.
+- Mehrfaches Drücken wird zusammengefasst, damit nur eine neue Anfrage entsteht.
+
+### Russische Sender
+
+Freies Kasy-EPG mit russischen Quellen: iptvx.one, it999/Edem, epg.one und epgshare01, einzeln oder kombiniert („Russland – alle Quellen“, „Russland + Deutschland“). Kyrillische Sendernamen werden zugeordnet (z. B. „Первый канал HD“ ↔ „Первый канал“).
+
 ### EPG aus der M3U
 
 Kasy TV lädt das EPG aus der Adresse im Kopf der M3U (`url-tvg`, `x-tvg-url`) bzw. aus der für die Quelle eingetragenen Adresse. Dafür probiert die App der Reihe nach:

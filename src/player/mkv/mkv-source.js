@@ -469,11 +469,20 @@ export class MkvSource {
         if (pos > 0 || this.size) headers.Range = `bytes=${pos}-`;
         const res = await fetch(this.url, { headers, signal: this.ctrl.signal, cache: 'no-store' });
         if (!res.ok && res.status !== 206) throw new Error('HTTP ' + res.status);
-        if (pos > 0 && res.status === 200) {
-          // Server ignores ranges – can only play from the start.
-          if (!this.noRange) console.warn('[mkv] Server unterstützt keine Range-Anfragen');
+        if (headers.Range && res.status === 200) {
+          // Server (or a proxy in front of it) ignores ranges: the file only comes from the start.
+          if (!this.noRange) console.warn('[mkv] Server beantwortet keine Teil-Anfragen (Range) – Springen über den Server');
           this.noRange = true;
-          if (pos > 0) throw new Error('Der Server erlaubt kein Springen in der Datei');
+          if (pos > 0) {
+            // Can't continue here – let the player ask the server to start the file at that position.
+            try {
+              res.body && res.body.cancel();
+            } catch {
+              /* ignore */
+            }
+            this.needServerSeek(this.seekTarget !== undefined ? this.seekTarget : this.video.currentTime);
+            return;
+          }
         }
         if (!this.size) {
           const cr = res.headers.get('content-range');
@@ -521,7 +530,7 @@ export class MkvSource {
           return;
         }
         await sleep(1000 * retries);
-        if (this.noRange && pos > 0) return this.fail(new Error('Der Server erlaubt kein Fortsetzen der Datei'));
+        if (this.noRange && pos > 0) return this.needServerSeek(this.video.currentTime);
         // Continue where we stopped; the demuxer continues seamlessly as long as no bytes are lost.
       }
     }
@@ -634,9 +643,18 @@ export class MkvSource {
     return this.cuesLoading;
   }
 
+  /** Seeking in the file isn't possible (no ranges / no index) → the player lets the server start there. */
+  needServerSeek(t) {
+    if (this.destroyed) return;
+    if (this.opts.onServerSeek) this.opts.onServerSeek(t);
+    else this.fail(new Error('Der Server erlaubt kein Springen in dieser Datei'));
+  }
+
   async seekTo(t) {
     if (this.destroyed || !this.header) return;
     if (this.isBuffered(t)) return;
+    this.seekTarget = t;
+    if (this.noRange) return this.needServerSeek(t);
     const gen = ++this.generation;
     if (this.ctrl) this.ctrl.abort();
     if (!this.cues && !this.cuesFailed) await this.loadCues();
@@ -658,7 +676,7 @@ export class MkvSource {
       offset = Math.max(this.header.segmentStart, Math.floor(this.size * frac));
       resync = true;
     } else {
-      return; // can't seek
+      return this.needServerSeek(t); // no index and unknown size (e.g. a stream the server remuxes)
     }
     for (const app of this.appenders.values()) app.clear();
     await this.whenIdle();

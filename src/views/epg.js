@@ -42,7 +42,7 @@ export function playArchive(channel, prog) {
     return;
   }
   const when = new Date(prog.start).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-  playUrl(url, { title: prog.title, subtitle: `${channel.name} · Archiv · ${when}`, live: false, image: channel.logo, resumeId: `archive:${channel.id}:${prog.start}` });
+  playUrl(url, { title: prog.title, subtitle: `${channel.name} · Archiv · ${when}`, live: false, image: channel.logo, resumeId: `archive:${channel.id}:${prog.start}`, archive: { channel, start: prog.start, stop: prog.stop } });
 }
 
 export async function epgView(el, { query }) {

@@ -1,8 +1,64 @@
 {
   "_comment": "Freie EPG-Quellen, die der GitHub-Workflow alle 6 Stunden nach ./epg/<id>.xml.gz spiegelt (gleiche Herkunft wie die App → kein CORS-Problem). Mehrere URLs je Eintrag = Ersatzquellen.",
   "sources": [
-    { "id": "de", "label": "Deutschland", "urls": ["https://epgshare01.online/epgshare01/epg_ripper_DE1.xml.gz", "https://raw.githubusercontent.com/globetvapp/epg/main/Germany/germany1.xml"] },
-    { "id": "at", "label": "Österreich", "urls": ["https://epgshare01.online/epgshare01/epg_ripper_AT1.xml.gz", "https://raw.githubusercontent.com/globetvapp/epg/main/Austria/austria1.xml"] },
-    { "id": "ch", "label": "Schweiz", "urls": ["https://epgshare01.online/epgshare01/epg_ripper_CH1.xml.gz", "https://raw.githubusercontent.com/globetvapp/epg/main/Switzerland/switzerland1.xml"] }
+    {
+      "id": "de",
+      "label": "Deutschland",
+      "urls": [
+        "https://epgshare01.online/epgshare01/epg_ripper_DE1.xml.gz",
+        "https://raw.githubusercontent.com/globetvapp/epg/main/Germany/germany1.xml"
+      ]
+    },
+    {
+      "id": "at",
+      "label": "Österreich",
+      "urls": [
+        "https://epgshare01.online/epgshare01/epg_ripper_AT1.xml.gz",
+        "https://raw.githubusercontent.com/globetvapp/epg/main/Austria/austria1.xml"
+      ]
+    },
+    {
+      "id": "ch",
+      "label": "Schweiz",
+      "urls": [
+        "https://epgshare01.online/epgshare01/epg_ripper_CH1.xml.gz",
+        "https://raw.githubusercontent.com/globetvapp/epg/main/Switzerland/switzerland1.xml"
+      ]
+    },
+    {
+      "id": "ru",
+      "label": "Russland (iptvx.one)",
+      "urls": [
+        "https://iptvx.one/EPG_LITE",
+        "http://iptvx.one/EPG_LITE",
+        "https://iptvx.one/epg/epg_lite.xml.gz"
+      ]
+    },
+    {
+      "id": "ru2",
+      "label": "Russland (it999 / Edem)",
+      "urls": [
+        "http://epg.it999.ru/edem.xml.gz",
+        "https://epg.it999.ru/edem.xml.gz",
+        "http://epg.it999.ru/epg.xml.gz"
+      ]
+    },
+    {
+      "id": "ru3",
+      "label": "Russland (epg.one)",
+      "urls": [
+        "http://epg.one/epg2.xml.gz",
+        "https://epg.one/epg2.xml.gz",
+        "http://epg.one/epg.xml.gz"
+      ]
+    },
+    {
+      "id": "ru4",
+      "label": "Russland (epgshare01)",
+      "urls": [
+        "https://epgshare01.online/epgshare01/epg_ripper_RU1.xml.gz",
+        "https://epgshare01.online/epgshare01/epg_ripper_RU2.xml.gz"
+      ]
+    }
   ]
 }

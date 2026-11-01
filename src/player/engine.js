@@ -40,9 +40,9 @@ function nativeHls(video) {
 }
 
 export class VideoEngine {
-  constructor(video, { onLevels, onTracks, onFatal, onNotice } = {}) {
+  constructor(video, { onLevels, onTracks, onFatal, onNotice, onServerSeek } = {}) {
     this.video = video;
-    this.cb = { onLevels, onTracks, onFatal, onNotice };
+    this.cb = { onLevels, onTracks, onFatal, onNotice, onServerSeek };
     this.mkv = null;
     this.extAudio = null;
     this.hls = null;
@@ -234,6 +234,12 @@ export class VideoEngine {
       },
       onTracks: () => this.cb.onTracks && this.cb.onTracks(),
       onMissingAudio: () => this.handleMissingAudio(m, src),
+      onServerSeek: (t) => {
+        if (this.mkv !== m) return;
+        if (opt.onServerSeek) opt.onServerSeek(t);
+        else if (this.cb.onServerSeek) this.cb.onServerSeek(t);
+        else if (this.cb.onFatal) this.cb.onFatal(new Error('Der Server erlaubt kein Springen in dieser Datei'));
+      },
     });
     this.mkv = m;
     m.open()

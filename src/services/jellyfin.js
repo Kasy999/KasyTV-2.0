@@ -329,7 +329,14 @@ export function deviceProfile() {
  * Asks Jellyfin how to play an item. Returns a play descriptor for the player:
  * { url, type: 'hls'|'file', startSeconds, subtitles, audioTracks, mediaSourceId, playSessionId, item, method }
  */
-export async function getPlayback(it, { startMs = null, audioIndex, subtitleIndex, forceTranscode = false } = {}) {
+/** Can this browser's MSE decode a Jellyfin audio codec (for the MKV decoder)? */
+function mseAudio(codec) {
+  const c = String(codec || '').toLowerCase();
+  const map = { aac: 'audio/mp4; codecs="mp4a.40.2"', ac3: 'audio/mp4; codecs="ac-3"', eac3: 'audio/mp4; codecs="ec-3"', opus: 'audio/mp4; codecs="opus"', flac: 'audio/mp4; codecs="flac"', mp3: 'audio/mp4; codecs="mp4a.6B"' };
+  return !!map[c] && mseProbe(map[c]);
+}
+
+export async function getPlayback(it, { startMs = null, audioIndex, subtitleIndex, forceTranscode = false, remuxAt = null } = {}) {
   const c = cfg();
   const body = {
     DeviceProfile: deviceProfile(),
@@ -353,7 +360,38 @@ export async function getPlayback(it, { startMs = null, audioIndex, subtitleInde
   let url;
   let type;
   let method;
-  if (!forceTranscode && (src.SupportsDirectPlay || src.SupportsDirectStream) && c.preferDirectPlay && !src.TranscodingUrl) {
+  let remux = null;
+  if (remuxAt !== null && remuxAt !== undefined && !forceTranscode && mkvDecoderCodecs()) {
+    // The way to the server doesn't allow jumping inside the file (no ranges, e.g. a proxy in front of
+    // Jellyfin): the server starts the file at the position and only re-packs it – picture copied, sound
+    // copied too if this device can decode it (otherwise only the sound is converted).
+    const streams0 = src.MediaStreams || [];
+    const aIdx = audioIndex !== undefined ? audioIndex : src.DefaultAudioStreamIndex;
+    const a = streams0.find((x) => x.Type === 'Audio' && x.Index === aIdx) || streams0.find((x) => x.Type === 'Audio');
+    const audioOk = !a || mseAudio(a.Codec);
+    const q = new URLSearchParams({
+      Static: 'false',
+      mediaSourceId: src.Id,
+      deviceId: c.deviceId,
+      api_key: c.token,
+      playSessionId: info.PlaySessionId || '',
+      VideoCodec: 'copy',
+      AudioCodec: audioOk ? 'copy' : 'aac',
+      AllowVideoStreamCopy: 'true',
+      AllowAudioStreamCopy: audioOk ? 'true' : 'false',
+      StartTimeTicks: String(Math.floor(remuxAt * 1000 * TICKS)),
+      SubtitleMethod: 'External',
+    });
+    if (!audioOk) {
+      q.set('AudioBitrate', '256000');
+      q.set('MaxAudioChannels', '6');
+    }
+    if (a) q.set('AudioStreamIndex', String(a.Index));
+    url = `${c.server}/Videos/${it.Id}/stream.mkv?${q}`;
+    type = 'mkv';
+    method = 'DirectStream';
+    remux = { at: remuxAt };
+  } else if (!forceTranscode && (src.SupportsDirectPlay || src.SupportsDirectStream) && c.preferDirectPlay && !src.TranscodingUrl) {
     const q = new URLSearchParams({ Static: 'true', mediaSourceId: src.Id, deviceId: c.deviceId, api_key: c.token, playSessionId: info.PlaySessionId || '' });
     if (src.ETag) q.set('Tag', src.ETag);
     url = `${c.server}/Videos/${it.Id}/stream${src.Container ? '.' + src.Container.split(',')[0] : ''}?${q}`;
@@ -398,7 +436,9 @@ export async function getPlayback(it, { startMs = null, audioIndex, subtitleInde
   const audioStreams = streams.filter((s) => s.Type === 'Audio');
   const chosenAudio = audioIndex !== undefined ? audioIndex : src.DefaultAudioStreamIndex;
   let mkv = null;
-  if (type === 'mkv') {
+  if (type === 'mkv' && remux) {
+    mkv = { size: 0, durationSeconds: src.RunTimeTicks ? src.RunTimeTicks / TICKS / 1000 : 0, audioTrack: 0, remuxAt: remux.at };
+  } else if (type === 'mkv') {
     const pos = audioStreams.findIndex((s) => s.Index === chosenAudio);
     mkv = {
       size: src.Size || 0,
@@ -431,6 +471,7 @@ export async function getPlayback(it, { startMs = null, audioIndex, subtitleInde
     type,
     method,
     mkv,
+    remuxAt: remux ? remux.at : null,
     // Jellyfin's HLS playlists cover the whole runtime, so the player seeks in both cases.
     startSeconds: startMs ? startMs / 1000 : 0,
     subtitles,
