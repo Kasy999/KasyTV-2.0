@@ -88,7 +88,7 @@ function epgSection(render) {
   const VIA = { mirror: ' (über Kasy-Spiegel)', proxy: ' (über Proxy)', https: ' (HTTPS)' };
   const describe = (d) =>
     `${d.channels}${d.total ? ' von ' + d.total : ''} Sendern mit Programm · ${d.count} Sendungen · Stand ${formatDate(d.updatedAt)}` +
-    (d.sources && d.sources.length ? ` · Quelle: ${d.sources.map((u) => (u.includes('/epg/') && !(d.via && d.via[u]) ? 'freies Kasy-EPG' : host(u) + ((d.via && VIA[d.via[u]]) || ''))).join(', ')}` : '') +
+    (d.sources && d.sources.length ? ` · Quelle: ${d.sources.map((u) => (/\/epg\/[a-z]{2}\.xml\.gz$/.test(u) ? 'freies Kasy-EPG' : host(u) + ((d.via && VIA[d.via[u]]) || ''))).join(', ')}` : '') +
     (d.primaryFailed ? ` · Playlist-EPG gesperrt (${d.primaryFailed})` : '');
   if (st) status.textContent = describe(st);
   else if (epg.epgError(src.id)) {
