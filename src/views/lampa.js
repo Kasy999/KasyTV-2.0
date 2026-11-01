@@ -81,8 +81,15 @@ function patchHistory(win) {
  * Local addresses (TorrServer in the home network …) stay unchanged.
  */
 const LOCAL = /^http:\/\/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|[^/]*\.local[:/])/i;
+// TMDB proxies of Lampa mirrors (e.g. tmdbapi./tmdbimg.bylampa.online) only speak plain HTTP. They exist for
+// regions where TMDB is blocked; from an HTTPS app they can't be reached, so their requests go to TMDB itself.
+const TMDB_API = /^http:\/\/[^/]*tmdb[^/]*\/3\//i;
+const TMDB_IMG = /^http:\/\/[^/]*(tmdb|image)[^/]*\/t\/p\//i;
+
 export function upgradeUrl(u) {
   if (typeof u !== 'string' || !/^http:\/\//i.test(u) || LOCAL.test(u) || location.protocol !== 'https:') return u;
+  if (TMDB_API.test(u)) return u.replace(/^http:\/\/[^/]+\/3\//i, 'https://api.themoviedb.org/3/');
+  if (TMDB_IMG.test(u)) return u.replace(/^http:\/\/[^/]+\/t\/p\//i, 'https://image.tmdb.org/t/p/');
   return 'https://' + u.slice(7);
 }
 
