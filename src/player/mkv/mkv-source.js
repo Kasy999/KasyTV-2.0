@@ -210,7 +210,10 @@ export class MkvSource {
     this.video = video;
     this.opts = opts;
     this.url = opts.url;
-    this.size = opts.size || 0;
+    // Size from the server is only a hint: Jellyfin reports the size of a .strm reference (a few bytes) for
+    // remote media – anything below 1 MB is treated as unknown and learned from the response instead.
+    this.size = opts.size > 1048576 ? opts.size : 0;
+    this.estimatedSize = opts.estimatedSize || 0;
     this.destroyed = false;
     this.ctrl = null;
     this.packers = new Map(); // track number → TrackPacker
@@ -487,8 +490,11 @@ export class MkvSource {
         if (!this.size) {
           const cr = res.headers.get('content-range');
           const m = cr && /\/(\d+)/.exec(cr);
+          const cl = parseInt(res.headers.get('content-length') || '0', 10);
           if (m) this.size = parseInt(m[1], 10);
-          else if (res.status === 200 && res.headers.get('content-length')) this.size = parseInt(res.headers.get('content-length'), 10);
+          // Content-Range is often not readable for web apps (CORS) – Content-Length is.
+          else if (res.status === 200 && cl) this.size = cl;
+          else if (res.status === 206 && cl && headers.Range === `bytes=${pos}-`) this.size = pos + cl;
         }
         const reader = res.body.getReader();
         while (!this.destroyed && gen === this.generation) {
@@ -670,10 +676,10 @@ export class MkvSource {
         else break;
       }
       offset = this.header.segmentStart + best.cluster;
-    } else if (this.size && this.durationSec) {
+    } else if ((this.size || this.estimatedSize) && this.durationSec) {
       // No index: estimate by bitrate, a little earlier, then search the next cluster.
       const frac = Math.max(0, Math.min(1, (t - 3) / this.durationSec));
-      offset = Math.max(this.header.segmentStart, Math.floor(this.size * frac));
+      offset = Math.max(this.header.segmentStart, Math.floor((this.size || this.estimatedSize) * frac));
       resync = true;
     } else {
       return this.needServerSeek(t); // no index and unknown size (e.g. a stream the server remuxes)

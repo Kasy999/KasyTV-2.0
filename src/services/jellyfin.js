@@ -441,7 +441,9 @@ export async function getPlayback(it, { startMs = null, audioIndex, subtitleInde
   } else if (type === 'mkv') {
     const pos = audioStreams.findIndex((s) => s.Index === chosenAudio);
     mkv = {
-      size: src.Size || 0,
+      // Remote media (.strm): Size is that of the reference file, not of the film.
+      size: !src.IsRemote && src.Size > 1048576 ? src.Size : 0,
+      estimatedSize: src.Bitrate && src.RunTimeTicks ? Math.round((src.Bitrate / 8) * (src.RunTimeTicks / 1e7)) : 0,
       durationSeconds: src.RunTimeTicks ? src.RunTimeTicks / TICKS / 1000 : 0,
       audioTrack: pos >= 0 ? pos : undefined,
       // Sound only, converted by the server (for DTS/TrueHD … the browser can't decode).

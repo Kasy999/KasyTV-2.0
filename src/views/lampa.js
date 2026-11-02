@@ -86,8 +86,17 @@ const LOCAL = /^http:\/\/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01]
 const TMDB_API = /^http:\/\/[^/]*tmdb[^/]*\/3\//i;
 const TMDB_IMG = /^http:\/\/[^/]*(tmdb|image)[^/]*\/t\/p\//i;
 
+// Online plugins (Lampac clients like bylampa "Онлайн Cinema") choose their server by the page protocol – in the
+// blob frame they see "blob:" and take the plain-HTTP server, which has no HTTPS. Use the HTTPS entrance of the
+// same service instead (answers the same /lite/… and stream requests).
+const HOST_MAP = [
+  [/^http:\/\/88\.218\.62\.180:9118/i, 'https://ab2024.ru'],
+  [/^http:\/\/94\.142\.140\.142:9118/i, 'https://ab2024.ru'],
+];
+
 export function upgradeUrl(u) {
   if (typeof u !== 'string' || !/^http:\/\//i.test(u) || LOCAL.test(u) || location.protocol !== 'https:') return u;
+  for (const [re, to] of HOST_MAP) if (re.test(u)) return u.replace(re, to);
   if (TMDB_API.test(u)) return u.replace(/^http:\/\/[^/]+\/3\//i, 'https://api.themoviedb.org/3/');
   if (TMDB_IMG.test(u)) return u.replace(/^http:\/\/[^/]+\/t\/p\//i, 'https://image.tmdb.org/t/p/');
   return 'https://' + u.slice(7);

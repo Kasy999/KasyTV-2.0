@@ -223,6 +223,7 @@ export class VideoEngine {
     const m = new MkvSource(this.video, {
       url,
       size: opt.size,
+      estimatedSize: opt.estimatedSize,
       durationSeconds: opt.durationSeconds,
       audioTrack: audioTrack !== undefined ? audioTrack : opt.audioTrack,
       preferLanguage: opt.preferLanguage,
