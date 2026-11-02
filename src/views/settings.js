@@ -381,6 +381,10 @@ const BUILDERS = {
           'Spielt MKV-Filme und -Serien von Jellyfin direkt: Die Datei wird im Browser umverpackt und vom Hardware-Decoder des Geräts abgespielt – der Server muss nichts umwandeln. Bei Tonformaten wie DTS oder TrueHD wandelt der Server nur den Ton um.',
           'player.mkvDecoder',
         ),
+        selectRow('Ton-Decoder im Browser', 'Für Tonformate, die dieses Gerät nicht selbst abspielen kann (z. B. E-AC-3 / Dolby Digital Plus in Chrome unter Windows). Automatisch: nur dann, wenn nötig – Fernseher und TV-Sticks mit Dolby-Unterstützung laden nichts.', 'player.softAudio', [
+          { value: 'auto', label: 'Automatisch' },
+          { value: 'off', label: 'Aus (Ton vom Server holen)' },
+        ], { onChange: () => import('../player/mkv/soft-audio.js').then((m) => m.resetSoftAudioCapability()) }),
       ),
       section(
         'Verhalten',

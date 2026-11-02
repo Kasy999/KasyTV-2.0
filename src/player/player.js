@@ -1306,7 +1306,7 @@ class Player {
     const s = this.session;
     const v = this.video;
     const rows = [
-      ['Technik', this.yt ? 'YouTube IFrame' : this.engine.kind === 'hlsjs' ? 'hls.js (MSE)' : this.engine.kind === 'mpegts' ? 'mpegts.js (MSE)' : this.engine.kind === 'dash' ? 'dash.js (MSE)' : this.engine.kind === 'mkv' ? 'Kasy MKV-Decoder (MSE, ohne Umwandlung)' + (this.engine.extAudio ? ' · Ton vom Server' : '') : 'Nativ'],
+      ['Technik', this.yt ? 'YouTube IFrame' : this.engine.kind === 'hlsjs' ? 'hls.js (MSE)' : this.engine.kind === 'mpegts' ? 'mpegts.js (MSE)' : this.engine.kind === 'dash' ? 'dash.js (MSE)' : this.engine.kind === 'mkv' ? 'Kasy MKV-Decoder (MSE, ohne Umwandlung)' + (this.engine.mkv && this.engine.mkv.softAudio ? ` · Ton im Browser dekodiert (${this.engine.mkv.softAudio.codec} → Opus)` : this.engine.extAudio ? ' · Ton vom Server' : '') : 'Nativ'],
       ['Auflösung', v.videoWidth ? `${v.videoWidth}×${v.videoHeight}` : '–'],
       ['Dauer', this.isVod() ? formatTime(this.duration()) : 'Live'],
     ];

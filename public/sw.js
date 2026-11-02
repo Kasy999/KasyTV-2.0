@@ -146,7 +146,9 @@ self.addEventListener('fetch', function (event) {
       event.respondWith(networkFirst(request, RUNTIME, 6000));
       return;
     }
-    event.respondWith(cacheFirst(request, url.pathname.indexOf('/lampa/') >= 0 ? RUNTIME : SHELL));
+    // Lampa and the sound decoder go to the runtime cache: kept across app updates, loaded only when used.
+    var runtime = url.pathname.indexOf('/lampa/') >= 0 || url.pathname.indexOf('/vendor/ffmpeg/') >= 0;
+    event.respondWith(cacheFirst(request, runtime ? RUNTIME : SHELL));
     return;
   }
 

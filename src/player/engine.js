@@ -361,7 +361,7 @@ export class VideoEngine {
   audioTracks() {
     if (this.mkv && this.mkv.audioTracks.length > 1) {
       const sel = this.mkv.selectedAudio;
-      return this.mkv.audioTracks.map((a) => ({ id: a.index, label: a.label + (a.supported ? '' : ' (Ton vom Server)'), lang: a.lang, active: sel ? sel.index === a.index : false }));
+      return this.mkv.audioTracks.map((a) => ({ id: a.index, label: a.label + (a.supported ? '' : this.mkv.softOk ? ' (im Browser dekodiert)' : ' (Ton vom Server)'), lang: a.lang, active: sel ? sel.index === a.index : false }));
     }
     if (this.hls && this.hls.audioTracks && this.hls.audioTracks.length > 1) {
       return this.hls.audioTracks.map((t, i) => ({ id: i, label: t.name || t.lang || 'Audio ' + (i + 1), lang: t.lang, active: i === this.hls.audioTrack }));

@@ -30,6 +30,8 @@ function precacheManifest() {
           if (rel === 'sw.js' || rel === 'precache-manifest.js' || rel.endsWith('.map')) continue;
           // A locally bundled Lampa can be large – it is cached at runtime when it is used.
           if (rel.startsWith('lampa/') && rel !== 'lampa/index.html') continue;
+          // The sound decoder (~25 MB unpacked) is only fetched on devices that need it, then cached at runtime.
+          if (rel.startsWith('vendor/ffmpeg/')) continue;
           files.push('./' + rel);
           hash.update(rel + ':' + st.size + ':' + st.mtimeMs);
         }

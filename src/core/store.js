@@ -56,6 +56,7 @@ export const DEFAULTS = {
   player: {
     engine: 'auto', // auto | hlsjs | native
     mkvDecoder: true, // Kasy MKV decoder: MKV without server conversion
+    softAudio: 'auto', // sound decoder in the browser (E-AC-3 …) when the device can't play it: auto | off
     autoplayNext: true,
     upNextSeconds: 30, // show "next episode" this long before the end (or at the credits)
     nextCountdown: 10, // seconds until the next episode starts by itself

@@ -13,7 +13,11 @@ const files = [
   ['node_modules/hls.js/dist/hls.min.js', 'hls.min.js'],
   ['node_modules/mpegts.js/dist/mpegts.js', 'mpegts.js'],
   ['node_modules/dashjs/dist/dash.all.min.js', 'dash.all.min.js'],
+  // Sound decoder (E-AC-3/AC-3/DTS/TrueHD in the browser) – only loaded on devices that need it.
+  ['node_modules/@ffmpeg/core/dist/umd/ffmpeg-core.js', 'ffmpeg/ffmpeg-core.js'],
+  ['node_modules/@ffmpeg/core/dist/umd/ffmpeg-core.wasm', 'ffmpeg/ffmpeg-core.wasm'],
 ];
+mkdirSync(resolve(out, 'ffmpeg'), { recursive: true });
 
 for (const [from, to] of files) {
   const src = resolve(root, from);

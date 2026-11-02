@@ -13,7 +13,8 @@
  *   fetches just the audio converted from Jellyfin (external-audio.js) while the picture still plays directly.
  */
 import { MkvDemuxer, parseCuesElement } from './demuxer.js';
-import { describeTrack, mseSupports, initSegment, fragment, audioFrameSamples } from './mp4.js';
+import { describeTrack, mseSupports, initSegment, fragment, audioFrameSamples, opusDescriptor } from './mp4.js';
+import { SoftAudio, softAudioCapable, softFormat } from './soft-audio.js';
 
 const NS = 1e9;
 
@@ -241,6 +242,8 @@ export class MkvSource {
     if (window.ManagedMediaSource && this.ms instanceof window.ManagedMediaSource) {
       this.video.disableRemotePlayback = true;
     }
+    // Can this device decode sound formats like E-AC-3 in software if it can't play them itself?
+    this.softOk = await softAudioCapable().catch(() => false);
     this.objectUrl = URL.createObjectURL(this.ms);
     this.video.src = this.objectUrl;
     await new Promise((resolve, reject) => {
@@ -319,8 +322,10 @@ export class MkvSource {
     if (!chosen && this.opts.preferLanguage) chosen = this.audioTracks.find((a) => a.lang && a.lang.startsWith(this.opts.preferLanguage));
     if (!chosen) chosen = this.audioTracks.find((a) => a.track.isDefault) || this.audioTracks[0] || null;
     this.selectedAudio = chosen;
+    let softTrack = null;
     if (chosen && !chosen.supported) {
-      this.missingAudio = { index: chosen.index, codec: chosen.desc.unsupported || chosen.desc.codecString };
+      if (this.softOk && softFormat(chosen.track.codecId)) softTrack = chosen; // decoded in the browser
+      else this.missingAudio = { index: chosen.index, codec: chosen.desc.unsupported || chosen.desc.codecString };
       chosen = null;
     }
 
@@ -353,8 +358,47 @@ export class MkvSource {
         this.addSourceBuffer('audio', chosen.desc);
         this.packers.set(chosen.number, new TrackPacker(chosen.desc, 0));
       }
+    } else if (softTrack) {
+      this.addSourceBuffer('audio', this.startSoft(softTrack));
     }
     if (this.opts.onTracks) this.opts.onTracks(this.audioTracks);
+  }
+
+  /** Sound the device can't play: decode it in the browser (soft-audio.js) and feed Opus into MSE. */
+  startSoft(a) {
+    const d = opusDescriptor(2);
+    mseSupports(d);
+    this.audioNumber = a.number;
+    this.softAudio = { codec: trackLabel(a.track, { unsupported: { A_EAC3: 'E-AC-3', A_AC3: 'AC-3', A_TRUEHD: 'TrueHD', A_MLP: 'MLP' }[a.track.codecId] || 'DTS' }).split(' · ').pop(), index: a.index };
+    this.soft = new SoftAudio(a.track, {
+      onFrame: (f) => this.onFrame({ ...f, track: a.number, soft: true }),
+      onError: (e) => this.softFailed(a, e),
+    });
+    this.packers.set(a.number, new TrackPacker(d, this.shiftNs));
+    return d;
+  }
+
+  /** The software decoder couldn't start: drop its (empty) sound buffer so the picture keeps running. */
+  softFailed(a, err) {
+    if (this.destroyed || !this.soft) return;
+    console.warn('[mkv] Ton-Decoder:', err && err.message);
+    this.soft.destroy();
+    this.soft = null;
+    this.softAudio = null;
+    this.packers.delete(a.number);
+    this.audioNumber = undefined;
+    const app = this.appenders.get('audio');
+    if (app) {
+      app.clear();
+      try {
+        if (this.ms.readyState === 'open') this.ms.removeSourceBuffer(app.sb);
+      } catch {
+        /* ignore */
+      }
+      this.appenders.delete('audio');
+    }
+    this.missingAudio = { index: a.index, codec: (err && err.message) || 'Ton-Decoder' };
+    if (this.opts.onMissingAudio) this.opts.onMissingAudio(this.missingAudio);
   }
 
   addSourceBuffer(kind, desc) {
@@ -367,11 +411,26 @@ export class MkvSource {
 
   // ------------------------------------------------------------ data flow
   onFrame(f) {
+    if (this.soft && f.track === this.audioNumber && !f.soft) {
+      this.soft.push(f);
+      return;
+    }
     if (f.track === this.audioNumber && this.pendingFirst.has(f.track)) {
       const a = this.pendingFirst.get(f.track);
       this.pendingFirst.delete(f.track);
       const d = describeTrack(a.track, f.data);
       if (d.unsupported || !mseSupports(d)) {
+        if (this.softOk && softFormat(a.track.codecId)) {
+          // E-AC-3 / AC-3 the device can't play: decode in the browser.
+          try {
+            this.finishDeferred(this.startSoft(a));
+          } catch (e) {
+            this.giveUpAudio(a, d.unsupported || d.codecString);
+            return;
+          }
+          this.soft.push(f);
+          return;
+        }
         this.giveUpAudio(a, d.unsupported || d.codecString);
         return;
       }
@@ -514,6 +573,8 @@ export class MkvSource {
         reader.cancel().catch(() => {});
         if (this.destroyed || gen !== this.generation) return;
         // End of file
+        if (this.soft) await this.soft.flush();
+        if (gen !== this.generation || this.destroyed) return;
         this.flushAll();
         await this.whenIdle();
         if (gen !== this.generation || this.destroyed) return;
@@ -562,6 +623,7 @@ export class MkvSource {
       if (this.destroyed || gen !== this.generation) return;
       let pending = 0;
       for (const a of this.appenders.values()) pending += a.pending;
+      if (this.soft) pending += this.soft.pending * 3; // sound still being decoded in the browser
       if (pending < 8 && this.bufferedAhead() < this.maxAhead) return;
       await sleep(pending >= 8 ? 50 : 400);
     }
@@ -688,6 +750,7 @@ export class MkvSource {
     await this.whenIdle();
     if (gen !== this.generation) return;
     for (const p of this.packers.values()) p.reset();
+    if (this.soft) this.soft.reset();
     // Old buffered ranges stay (they may be useful when seeking back) – cleanup() removes them later.
     try {
       for (const app of this.appenders.values()) app.sb.abort && this.ms.readyState === 'open' && !app.sb.updating && app.sb.abort();
@@ -702,6 +765,7 @@ export class MkvSource {
   // ------------------------------------------------------------ teardown
   destroy() {
     this.destroyed = true;
+    if (this.soft) this.soft.destroy();
     this.generation++;
     clearInterval(this.cleanupTimer);
     clearTimeout(this.seekTimer);

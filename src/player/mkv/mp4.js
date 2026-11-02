@@ -295,6 +295,12 @@ export function describeTrack(t, firstFrame) {
   return { unsupported: 'keine Video-/Tonspur' };
 }
 
+/** Opus track description for sound the software decoder re-encoded (48 kHz stereo). */
+export function opusDescriptor(channels = 2) {
+  const dops = concat(u8(0, channels), u16(0), u32(48000), u16(0), u8(0));
+  return { kind: 'audio', codec: 'opus', entry: 'Opus', configBox: box('dOps', dops), codecString: 'opus', timescale: 48000, sampleRate: 48000, channels, samplesOf: opusSamples };
+}
+
 /** Is a described track playable through MSE on this device? Sets desc.mime. */
 export function mseSupports(desc) {
   const MS = window.ManagedMediaSource || window.MediaSource || window.WebKitMediaSource;

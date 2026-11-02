@@ -14,6 +14,7 @@
     "test": "node --test tests/m3u-parser.test.mjs tests/segments.test.mjs tests/epg.test.mjs tests/mkv.test.mjs"
   },
   "dependencies": {
+    "@ffmpeg/core": "0.12.10",
     "dashjs": "^4.7.4",
     "hls.js": "^1.5.17",
     "mpegts.js": "^1.7.3"
