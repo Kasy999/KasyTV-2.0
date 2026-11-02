@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-globalThis.window = {};
+globalThis.window = { addEventListener() {} };
 const { MkvDemuxer, readVint } = await import('../src/player/mkv/demuxer.js');
 const { describeTrack, initSegment } = await import('../src/player/mkv/mp4.js');
 const { TrackPacker } = await import('../src/player/mkv/mkv-source.js');
