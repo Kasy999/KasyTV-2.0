@@ -29,7 +29,6 @@ let mode = null; // 'hooked' | 'plain'
 let blobUrl = null;
 
 const MIRROR = 'https://yumata.github.io/lampa/';
-let mirrorNotice = false;
 
 function lampaUrl() {
   if (store.get('lampa.source') === 'local') return new URL('./lampa/', location.href).href;
@@ -37,14 +36,9 @@ function lampaUrl() {
   if (!u) return MIRROR;
   if (!/^https?:\/\//i.test(u)) u = (location.protocol === 'https:' ? 'https://' : 'http://') + u;
   u = u.endsWith('/') || /\.html?$/i.test(u) ? u : u + '/';
-  // An HTTPS app can't embed an HTTP page – use the official HTTPS build instead of opening a new tab.
-  if (isMixedContent(u)) {
-    if (!mirrorNotice) {
-      mirrorNotice = true;
-      toast('HTTP-Adresse von Lampa ist in der HTTPS-App gesperrt – nutze den offiziellen HTTPS-Build', { duration: 4500 });
-    }
-    return MIRROR;
-  }
+  // An HTTPS app can't embed an HTTP page – load the same server over HTTPS (e.g. http://bylampa.online →
+  // https://bylampa.online).
+  if (isMixedContent(u)) return u.replace(/^http:/i, 'https:');
   return u;
 }
 

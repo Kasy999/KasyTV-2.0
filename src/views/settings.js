@@ -493,8 +493,31 @@ const BUILDERS = {
     ];
   },
 
-  async lampa() {
+  async lampa(render) {
+    const BYLAMPA = 'http://bylampa.online';
+    const isBylampa = /^(https?:\/\/)?bylampa\.online\/?$/i.test((store.get('lampa.url') || '').trim()) && store.get('lampa.source') !== 'local';
     return [
+      section(
+        'Schnellauswahl',
+        actionRow(
+          'bylampa.online',
+          isBylampa ? 'Ist als Startparameter gesetzt.' : 'Setzt http://bylampa.online als Startparameter (Lampa Uncensored mit Plugins). In der HTTPS-App wird automatisch die HTTPS-Adresse desselben Servers geladen.',
+          isBylampa ? 'Gesetzt' : 'Als Startparameter setzen',
+          () => {
+            store.set('lampa.source', 'remote');
+            store.set('lampa.url', BYLAMPA);
+            toast('Lampa startet jetzt mit ' + BYLAMPA, { kind: 'success' });
+            render();
+          },
+          { iconName: 'check' },
+        ),
+        actionRow('Offizieller Lampa-Build', 'Zurück zum Standard (yumata.github.io/lampa).', 'Zurücksetzen', () => {
+          store.set('lampa.source', 'remote');
+          store.set('lampa.url', 'https://yumata.github.io/lampa/');
+          toast('Lampa startet wieder mit dem offiziellen Build');
+          render();
+        }, { iconName: 'refresh' }),
+      ),
       section(
         'Quelle',
         selectRow('Lampa laden von', null, 'lampa.source', [
@@ -502,7 +525,7 @@ const BUILDERS = {
           { value: 'local', label: 'Lokal mitgeliefert', description: 'Lampa-Build in public/lampa/ (gleiche Herkunft, voll integriert)' },
         ]),
         textRow('Adresse', 'Lampa- oder Wampa-Instanz. Standard: offizieller HTTPS-Build (yumata.github.io/lampa)', 'lampa.url', { placeholder: 'https://yumata.github.io/lampa/' }),
-        h('p.hint', 'Lampa läuft direkt in der App (kein neuer Tab). HTTP-Adressen sind in der HTTPS-App gesperrt – dann wird automatisch der offizielle HTTPS-Build verwendet.'),
+        h('p.hint', 'Lampa läuft direkt in der App (kein neuer Tab). HTTP-Adressen lädt die HTTPS-App über HTTPS vom selben Server (der Server muss HTTPS anbieten, wie bylampa.online).'),
       ),
     ];
   },
